@@ -4,193 +4,233 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#2447c6">
 <title>Gemini Chat</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  /* Layout: bitta ustun. Tepada panel, o'rtada xabarlar, pastda yozish paneli. Chatlar chap tortmada. */
-  --bg: #f4f5f8;
-  --surface: #ffffff;
-  --ink: #15181f;
-  --muted: #5b6372;
-  --line: #dcdfe6;
-  --accent: #2b47d0;
-  --on-accent: #ffffff;
-  --claude: #0b7a68;
-  --danger: #bf3329;
-  --code: #eceef3;
-  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  /* Layout: bitta ustun. Tepada panel, o'rtada xabarlar, pastda yozish paneli, chatlar chap tortmada.
+     Uslub: iliq krem fon, oq yumaloq kartochkalar, rangli gradient plitka-ikonkalar, ingichka chiziqli boshqaruv ikonkalari. */
+  --bg: #fbf7f3; --glow1: #ffe4d3; --glow2: #e4e8ff;
+  --surface: #ffffff; --ink: #1d2236; --muted: #6c7489; --line: #eae5ef;
+  --accent: #2447c6; --accent-2: #0f8fe0; --accent-soft: #e9eeff; --on-accent: #ffffff;
+  --btn1: #4169e6; --btn2: #2447c6;
+  --claude: #0c9b84; --danger: #c8372d; --code: #f1eff7;
+  --shadow: 0 1px 2px rgba(40, 40, 90, .06), 0 8px 22px rgba(40, 50, 120, .09);
+  --sans: "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --codefont: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0f1115; --surface: #171a21; --ink: #e7e9ee; --muted: #98a0ae; --line: #272c36;
-    --accent: #8196ff; --on-accent: #0f1115; --claude: #3cc3aa; --danger: #ff7a6c; --code: #1f232c;
+    --bg: #0e1220; --glow1: #2b2040; --glow2: #14234d;
+    --surface: #171c2f; --ink: #eef0fa; --muted: #9aa3bd; --line: #272e48;
+    --accent: #7b95ff; --accent-2: #38b6ff; --accent-soft: #1e2748; --on-accent: #0e1220;
+    --btn1: #93aaff; --btn2: #6d89f7;
+    --claude: #3fd0b4; --danger: #ff7d70; --code: #1e2438;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 22px rgba(0, 0, 0, .35);
   }
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body {
-  background: var(--bg); color: var(--ink); font: 400 16px/1.55 var(--sans);
+  background:
+    radial-gradient(900px 420px at 0% -8%, var(--glow1), transparent 70%),
+    radial-gradient(800px 420px at 100% -8%, var(--glow2), transparent 70%),
+    var(--bg);
+  background-attachment: fixed;
+  color: var(--ink); font: 400 16px/1.55 var(--sans);
   display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden;
 }
 button, input, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 [hidden] { display: none !important; }
+.ic { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 
 .wrap { width: 100%; max-width: 760px; margin: 0 auto;
   padding-left: max(14px, env(safe-area-inset-left, 0px)); padding-right: max(14px, env(safe-area-inset-right, 0px)); }
 
-header.top { flex: none; background: var(--surface); border-bottom: 1px solid var(--line);
-  padding-top: env(safe-area-inset-top, 0px); }
-header.top .wrap { display: flex; align-items: center; gap: 6px; min-height: 52px; }
-.ibtn { flex: none; min-width: 44px; height: 44px; border: 0; background: none; border-radius: 8px;
-  font: 500 13px var(--mono); color: var(--ink); padding: 0 10px; }
-.ibtn:hover { background: var(--bg); }
-.ibtn.primary { color: var(--accent); }
-#title { flex: 1; min-width: 0; text-align: left; border: 0; background: none; font: 600 16px var(--sans);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 8px 6px; border-radius: 8px; }
-#titleEdit { flex: 1; min-width: 0; font: 600 16px var(--sans); padding: 8px; border: 1px solid var(--accent);
-  border-radius: 8px; background: var(--bg); }
+/* tepa panel */
+header.top { flex: none; padding-top: env(safe-area-inset-top, 0px);
+  background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+header.top .wrap { display: flex; align-items: center; gap: 4px; min-height: 58px; }
+.ibtn { flex: none; width: 44px; height: 44px; border: 0; background: none; border-radius: 13px; display: grid; place-items: center; color: var(--ink); }
+.ibtn:hover { background: var(--accent-soft); }
+.ibtn.acc { color: var(--accent); }
+.spin .ic { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#title { flex: 1; min-width: 0; text-align: left; border: 0; background: none; font: 800 18px var(--sans);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 8px 8px; border-radius: 12px; }
+#titleEdit { flex: 1; min-width: 0; font: 800 18px var(--sans); padding: 8px 10px; border: 2px solid var(--accent); border-radius: 12px; background: var(--surface); }
 
-.banner { flex: none; background: var(--accent); color: var(--on-accent); }
-.banner .wrap { display: flex; align-items: center; gap: 10px; padding-top: 8px; padding-bottom: 8px; font-size: 14px; }
+.banner { flex: none; background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #fff; }
+.banner .wrap { display: flex; align-items: center; gap: 10px; padding-top: 9px; padding-bottom: 9px; font-size: 14px; font-weight: 600; }
 .banner span { flex: 1; min-width: 0; }
-.banner button { border: 0; border-radius: 8px; padding: 8px 12px; font: 500 13px var(--mono);
-  background: var(--on-accent); color: var(--accent); }
+.banner button { border: 0; border-radius: 11px; padding: 9px 13px; font: 800 13px var(--sans); background: #fff; color: #2447c6; display: flex; align-items: center; gap: 6px; }
+.banner .ic { width: 16px; height: 16px; }
 
 main#msgs { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-main#msgs .wrap { padding-top: 16px; padding-bottom: 24px; display: flex; flex-direction: column; gap: 22px; }
+main#msgs .wrap { padding-top: 14px; padding-bottom: 26px; display: flex; flex-direction: column; gap: 20px; }
 
+/* tile-ikonkalar */
+.tile { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; flex: none; color: #fff;
+  background: linear-gradient(135deg, #8a93ff, #4b45d6); box-shadow: 0 2px 6px rgba(70, 70, 200, .25); }
+.tile .ic { width: 19px; height: 19px; }
+.tile.sm { width: 28px; height: 28px; border-radius: 9px; } .tile.sm .ic { width: 16px; height: 16px; }
+.tile.big { width: 64px; height: 64px; border-radius: 20px; } .tile.big .ic { width: 32px; height: 32px; }
+.tile.me { background: linear-gradient(135deg, #8a93ff, #4b45d6); }
+.tile.gem { background: linear-gradient(135deg, #3cc0ff, #2447c6); box-shadow: 0 2px 6px rgba(36, 100, 220, .3); }
+.tile.cl { background: linear-gradient(135deg, #3fdcb4, #0b8f7a); box-shadow: 0 2px 6px rgba(10, 150, 120, .28); }
+.tile.k-text { background: linear-gradient(135deg, #3cc0ff, #2447c6); }
+.tile.k-image { background: linear-gradient(135deg, #ffb26b, #ef5f7c); box-shadow: 0 2px 6px rgba(240, 100, 100, .28); }
+.tile.k-audio { background: linear-gradient(135deg, #bc96ff, #6a4fd8); box-shadow: 0 2px 6px rgba(110, 80, 220, .28); }
+.tile.k-other { background: linear-gradient(135deg, #a3adc0, #6c7489); box-shadow: none; }
+
+/* xabarlar */
 .msg { min-width: 0; }
-.msg.user { background: var(--surface); border-radius: 12px; padding: 12px 14px; margin-left: 8%; }
-.meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font: 400 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
-.who { font-weight: 500; letter-spacing: .06em; color: var(--ink); }
-.msg.model .who { color: var(--accent); }
-.msg.by-claude .who { color: var(--claude); }
-.tag { border: 1px solid var(--line); border-radius: 99px; padding: 0 8px; font-size: 11px; }
+.msg.user { background: var(--surface); border-radius: 18px; padding: 12px 14px 8px; margin-left: 7%; box-shadow: var(--shadow); }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font: 600 12px var(--sans); color: var(--muted); margin-bottom: 8px; }
+.who { font: 800 14px var(--sans); color: var(--ink); }
+.tag { border: 1px solid var(--line); border-radius: 99px; padding: 0 9px; font-size: 11px; font-weight: 700; }
 .tag.wait { color: var(--accent); border-color: var(--accent); }
+.tag.warn { color: var(--danger); border-color: var(--danger); }
+.tag.cur { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .body { overflow-wrap: anywhere; min-width: 0; }
 .body.plain { white-space: pre-wrap; }
 .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
 .md p, .md ul, .md ol, .md pre, .md blockquote, .md table { margin: .7em 0; }
-.md h1, .md h2, .md h3, .md h4 { line-height: 1.3; margin: 1.1em 0 .4em; }
+.md h1, .md h2, .md h3, .md h4 { line-height: 1.3; margin: 1.1em 0 .4em; font-weight: 800; }
 .md h1 { font-size: 1.3em; } .md h2 { font-size: 1.18em; } .md h3, .md h4 { font-size: 1.05em; }
 .md a { color: var(--accent); }
-.md code { font: 400 .9em var(--mono); background: var(--code); border-radius: 4px; padding: .1em .35em; }
-.md pre { position: relative; background: var(--code); border-radius: 10px; padding: 12px 14px; overflow-x: auto; }
-.md pre code { background: none; padding: 0; font-size: 13px; line-height: 1.5; }
-.md pre .cpy { position: absolute; top: 6px; right: 6px; border: 0; border-radius: 6px; padding: 4px 8px;
-  font: 500 11px var(--mono); background: var(--surface); color: var(--muted); }
+.md code { font: 400 .88em var(--codefont); background: var(--code); border-radius: 6px; padding: .1em .38em; }
+.md pre { position: relative; background: var(--code); border-radius: 14px; padding: 14px 16px; overflow-x: auto; }
+.md pre code { background: none; padding: 0; font-size: 13px; line-height: 1.55; }
+.md pre .cpy { position: absolute; top: 8px; right: 8px; border: 0; border-radius: 9px; padding: 5px 10px;
+  font: 700 11px var(--sans); background: var(--surface); color: var(--muted); box-shadow: var(--shadow); }
 .md blockquote { border-left: 3px solid var(--line); padding-left: 12px; color: var(--muted); }
 .md table { display: block; overflow-x: auto; border-collapse: collapse; }
-.md th, .md td { border: 1px solid var(--line); padding: 4px 8px; }
-.acts { display: flex; flex-wrap: wrap; gap: 2px; margin: 8px -8px 0; }
-.acts button { border: 0; background: none; color: var(--muted); font: 500 12px var(--mono); padding: 9px 8px; border-radius: 6px; }
-.acts button:hover { background: var(--bg); color: var(--ink); }
-.acts button.warn { color: var(--danger); }
-.acts button.go { color: var(--accent); }
+.md th, .md td { border: 1px solid var(--line); padding: 4px 9px; }
+.acts { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 6px -6px 0; }
+.ab { border: 0; background: none; color: var(--muted); height: 38px; min-width: 38px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.ab .ic { width: 18px; height: 18px; }
+.ab:hover { background: var(--accent-soft); color: var(--ink); }
+.ab.txt { padding: 0 12px; font: 800 13px var(--sans); }
+.ab.go { color: var(--accent); } .ab.warn { color: var(--danger); }
 details.prev { margin-top: 8px; font-size: 14px; color: var(--muted); }
-details.prev summary { cursor: pointer; font: 400 12px var(--mono); }
+details.prev summary { cursor: pointer; font: 700 12px var(--sans); }
 details.prev .old { white-space: pre-wrap; border-left: 3px solid var(--line); padding-left: 10px; margin: 8px 0; }
-.editbox { width: 100%; min-height: 120px; max-height: 50vh; resize: vertical; padding: 10px; border-radius: 8px;
-  border: 1px solid var(--accent); background: var(--bg); line-height: 1.5; }
-.thinking { font: 400 13px var(--mono); color: var(--muted); }
-.empty, .onboard { color: var(--muted); font-size: 15px; }
-.onboard h2 { color: var(--ink); font-size: 18px; margin: 0 0 8px; }
-.onboard ol { padding-left: 20px; }
-.btn { border: 0; border-radius: 10px; padding: 11px 16px; font: 500 14px var(--sans); background: var(--accent); color: var(--on-accent); }
-.btn.alt { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+.editbox { width: 100%; min-height: 120px; max-height: 50vh; resize: vertical; padding: 11px 12px; border-radius: 14px;
+  border: 2px solid var(--accent); background: var(--bg); line-height: 1.5; }
+.thinking { display: flex; align-items: center; gap: 4px; font: 700 13px var(--sans); color: var(--muted); }
+.dots i { display: inline-block; width: 6px; height: 6px; margin-right: 3px; border-radius: 50%; background: var(--accent); opacity: .3; animation: blink 1.2s infinite; }
+.dots i:nth-child(2) { animation-delay: .2s; } .dots i:nth-child(3) { animation-delay: .4s; }
+@keyframes blink { 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .spin .ic, .dots i { animation: none; } }
+.hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 52px 10px; color: var(--muted); font-size: 15px; }
+.hero h2 { color: var(--ink); margin: 6px 0 0; font-size: 22px; font-weight: 800; }
+.hero p { margin: 0; max-width: 34ch; }
+.btn { border: 0; border-radius: 14px; padding: 12px 18px; font: 800 14px var(--sans); color: var(--on-accent);
+  background: linear-gradient(180deg, var(--btn1), var(--btn2)); box-shadow: 0 4px 12px rgba(36, 71, 198, .28); display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn.alt { background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: none; }
+.btn .ic { width: 18px; height: 18px; }
 
-footer.composer { flex: none; background: var(--surface); border-top: 1px solid var(--line);
-  padding-bottom: env(safe-area-inset-bottom, 0px); }
-footer.composer .wrap { padding-top: 10px; padding-bottom: 10px; }
+/* pastki panel */
+footer.composer { flex: none; padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
 .row { display: flex; align-items: flex-end; gap: 8px; }
-#input { flex: 1; min-width: 0; resize: none; max-height: 160px; padding: 10px 12px; border-radius: 12px;
-  border: 1px solid var(--line); background: var(--bg); line-height: 1.45; }
-#send { height: 44px; padding: 0 18px; flex: none; }
-#send:disabled { opacity: .5; }
-.chip { margin-top: 6px; border: 0; background: none; padding: 4px 0; font: 400 12px var(--mono); color: var(--muted); }
+#input { flex: 1; min-width: 0; resize: none; max-height: 160px; padding: 12px 15px; border-radius: 20px;
+  border: 1px solid var(--line); background: var(--surface); line-height: 1.45; box-shadow: var(--shadow); }
+.send { width: 48px; height: 48px; flex: none; border: 0; border-radius: 50%; display: grid; place-items: center; color: var(--on-accent);
+  background: linear-gradient(180deg, var(--btn1), var(--btn2)); box-shadow: 0 4px 12px rgba(36, 71, 198, .3); }
+.send:disabled { opacity: .5; }
+.send .ic { width: 22px; height: 22px; }
+.chip { margin-top: 6px; border: 0; background: none; padding: 5px 4px; font: 700 12px var(--sans); color: var(--muted);
+  display: inline-flex; align-items: center; gap: 6px; border-radius: 10px; }
+.chip .ic { width: 15px; height: 15px; color: var(--accent); }
 
-.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
-  max-width: min(92vw, 520px); background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: 10px;
-  font-size: 14px; z-index: 40; overflow-wrap: anywhere; max-height: 35vh; overflow-y: auto; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 104px);
+  max-width: min(92vw, 520px); background: var(--ink); color: var(--bg); padding: 11px 15px; border-radius: 14px;
+  font: 600 14px var(--sans); z-index: 40; overflow-wrap: anywhere; max-height: 35vh; overflow-y: auto; box-shadow: var(--shadow); }
 .toast.err { background: var(--danger); color: #fff; }
 
-.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 20; }
+/* tortma va oynalar */
+.scrim { position: fixed; inset: 0; background: rgba(15, 18, 40, .45); z-index: 20; }
 .drawer, .sheet { position: fixed; z-index: 30; background: var(--surface); }
-.drawer { top: 0; bottom: 0; left: 0; width: min(88vw, 340px); display: flex; flex-direction: column;
+.drawer { top: 0; bottom: 0; left: 0; width: min(88vw, 340px); display: flex; flex-direction: column; border-radius: 0 24px 24px 0;
   padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); }
-.drawer h2, .sheet h2 { font: 600 15px var(--sans); margin: 0; }
-.drawer .head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; gap: 8px; }
-.drawer ul { list-style: none; margin: 0; padding: 0 6px 12px; overflow-y: auto; flex: 1; }
-.drawer li { display: flex; align-items: center; border-radius: 8px; }
-.drawer li.cur { background: var(--bg); }
-.drawer li .pick { flex: 1; min-width: 0; text-align: left; border: 0; background: none; padding: 10px 8px; }
-.drawer li .t { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.drawer li .s { display: block; font: 400 12px var(--mono); color: var(--muted); }
-.drawer li .x { border: 0; background: none; color: var(--muted); font: 500 12px var(--mono); padding: 12px 10px; border-radius: 6px; }
+.drawer h2, .sheet h2 { font: 800 17px var(--sans); margin: 0; }
+.drawer .head { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 10px; gap: 8px; }
+.drawer .head .btn { padding: 10px 14px; }
+.drawer ul { list-style: none; margin: 0; padding: 0 8px 12px; overflow-y: auto; flex: 1; }
+.drawer li { display: flex; align-items: center; border-radius: 14px; }
+.drawer li.cur { background: var(--accent-soft); }
+.pick { flex: 1; min-width: 0; text-align: left; border: 0; background: none; padding: 9px 8px; display: flex; align-items: center; gap: 11px; }
+.tx { min-width: 0; flex: 1; }
+.drawer li .t, .plist .t { display: block; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawer li .s { display: block; font: 600 12px var(--sans); color: var(--muted); }
+.drawer li .x, .plist .x { flex: none; border: 0; background: none; color: var(--muted); font: 800 12px var(--sans); height: 40px; min-width: 40px; padding: 0 10px; border-radius: 11px; display: grid; place-items: center; }
 .drawer li .x.arm { color: var(--danger); }
-.sheet { left: 0; right: 0; bottom: 0; max-height: 92dvh; overflow-y: auto; border-radius: 16px 16px 0 0;
-  padding: 16px max(16px, env(safe-area-inset-left, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)); }
+.plist .x { color: var(--accent); align-self: center; }
+.sheet { left: 0; right: 0; bottom: 0; max-height: 92dvh; overflow-y: auto; border-radius: 26px 26px 0 0;
+  padding: 20px max(18px, env(safe-area-inset-left, 0px)) calc(18px + env(safe-area-inset-bottom, 0px)); }
 @media (min-width: 700px) { .sheet { left: 50%; right: auto; width: 560px; transform: translateX(-50%); } }
-.sheet label { display: block; font: 500 12px var(--mono); color: var(--muted); margin: 14px 0 4px; }
-.sheet input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); }
-.sheet .help { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
-.sheet .help a { color: var(--accent); }
-.sheet .actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
-.modelbtn { width: 100%; text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line);
-  background: var(--bg); font: 400 14px var(--mono); overflow-wrap: anywhere; }
-.picker { display: flex; flex-direction: column; height: min(86dvh, 760px); }
-.phead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-.picker input { margin-bottom: 8px; }
+.sheet label { display: block; font: 800 11px var(--sans); letter-spacing: .08em; color: var(--muted); margin: 16px 0 5px; }
+.sheet input { width: 100%; padding: 12px 14px; border-radius: 13px; border: 1px solid var(--line); background: var(--bg); }
+.sheet .help { font-size: 13px; color: var(--muted); margin: 5px 0 0; }
+.sheet .help a { color: var(--accent); font-weight: 700; }
+.sheet .actions { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+.modelbtn { width: 100%; text-align: left; padding: 12px 14px; border-radius: 13px; border: 1px solid var(--line);
+  background: var(--bg); font: 700 14px var(--sans); overflow-wrap: anywhere; display: flex; align-items: center; gap: 10px; }
+.modelbtn .ic { color: var(--accent); }
+
+.picker { display: flex; flex-direction: column; height: min(88dvh, 780px); }
+.phead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.phead .btn { padding: 9px 13px; }
+.picker input { margin-bottom: 10px; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-.chips button { border: 1px solid var(--line); background: none; border-radius: 99px; padding: 7px 12px; font: 500 12px var(--mono); color: var(--muted); }
-.chips button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.chips button { border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 8px 14px; font: 800 12px var(--sans); color: var(--muted); }
+.chips button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: 0 3px 8px rgba(36, 71, 198, .25); }
 .plist { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; }
-.plist li { display: flex; align-items: flex-start; border-radius: 8px; }
-.plist li.cur { background: var(--bg); }
-.plist .pick { flex: 1; min-width: 0; text-align: left; border: 0; background: none; padding: 10px 8px; }
-.plist .t { display: block; font-weight: 500; overflow-wrap: anywhere; }
-.plist .id { display: block; font: 400 12px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.plist li { display: flex; align-items: flex-start; border-radius: 14px; }
+.plist li.cur { background: var(--accent-soft); }
+.plist .pick { align-items: flex-start; padding: 10px 8px; }
+.plist .t { white-space: normal; overflow-wrap: anywhere; }
+.plist .id { display: block; font: 400 12px var(--codefont); color: var(--muted); overflow-wrap: anywhere; }
 .plist .m2 { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 5px; align-items: center; }
-.plist .x { flex: none; border: 0; background: none; color: var(--accent); font: 500 12px var(--mono); padding: 12px 10px; border-radius: 6px; }
 .plist .note { padding: 12px 8px; color: var(--muted); font-size: 14px; }
-.st { font: 400 12px var(--mono); } .st.ok { color: var(--claude); } .st.bad { color: var(--danger); }
-.tag.warn { color: var(--danger); border-color: var(--danger); }
-.tag.cur { color: var(--accent); border-color: var(--accent); }
+.st { font: 600 12px var(--sans); } .st.ok { color: var(--claude); } .st.bad { color: var(--danger); }
 </style>
 </head>
 <body>
 
 <header class="top"><div class="wrap">
-  <button class="ibtn" id="btnList" aria-label="Chatlar">Chatlar</button>
+  <button class="ibtn" id="btnList" data-ic="menu" aria-label="Chatlar" title="Chatlar"></button>
   <button id="title" aria-label="Chat nomini o'zgartirish">Gemini Chat</button>
-  <button class="ibtn primary" id="btnSync" aria-label="Yangilash">Sync</button>
-  <button class="ibtn" id="btnSettings" aria-label="Sozlamalar">Sozlama</button>
+  <button class="ibtn acc" id="btnSync" data-ic="sync" aria-label="Sync" title="Sync"></button>
+  <button class="ibtn" id="btnSettings" data-ic="settings" aria-label="Sozlamalar" title="Sozlamalar"></button>
 </div></header>
 
-<div class="banner" id="banner" hidden><div class="wrap"><span id="bannerText"></span><button id="bannerBtn">Javob olish</button></div></div>
+<div class="banner" id="banner" hidden><div class="wrap"><span id="bannerText"></span><button id="bannerBtn" data-ic="sparkle">Javob olish</button></div></div>
 
 <main id="msgs"><div class="wrap" id="msgsInner"></div></main>
 
 <footer class="composer"><div class="wrap">
   <div class="row">
     <textarea id="input" rows="1" placeholder="Gemini'ga yozing…" aria-label="Xabar"></textarea>
-    <button class="btn" id="send">Yuborish</button>
+    <button class="send" id="send" data-ic="send" aria-label="Yuborish" title="Yuborish"></button>
   </div>
-  <button class="chip" id="modelChip">model: tanlanmagan</button>
+  <button class="chip" id="modelChip" data-ic="sparkle" aria-label="Modelni tanlash"><span id="modelName">tanlanmagan</span></button>
 </div></footer>
 
 <div class="toast" id="toast" hidden></div>
 
 <div class="scrim" id="scrim" hidden></div>
 <aside class="drawer" id="drawer" hidden>
-  <div class="head"><h2>Chatlar</h2><button class="btn" id="btnNew">Yangi chat</button></div>
+  <div class="head"><h2>Chatlar</h2><button class="btn" id="btnNew" data-ic="plus">Yangi</button></div>
   <ul id="chatList"></ul>
 </aside>
 
@@ -212,11 +252,11 @@ footer.composer .wrap { padding-top: 10px; padding-bottom: 10px; }
   <label for="s-branch">BRANCH</label>
   <input id="s-branch" autocomplete="off" autocapitalize="off" spellcheck="false">
 
-  <div class="actions"><button class="btn" id="btnSave">Saqlash</button><button class="btn alt" id="btnClose">Yopish</button></div>
+  <div class="actions"><button class="btn" id="btnSave" data-ic="check">Saqlash</button><button class="btn alt" id="btnClose">Yopish</button></div>
 </section>
 
 <section class="sheet picker" id="picker" hidden>
-  <div class="phead"><h2>Model tanlash</h2><button class="btn alt" id="p-reload">Yangilash</button></div>
+  <div class="phead"><h2>Model tanlash</h2><button class="btn alt" id="p-reload" data-ic="sync">Yangilash</button></div>
   <input id="p-q" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Qidirish yoki model nomini yozing">
   <div class="chips" id="p-chips">
     <button data-k="text">Matn</button><button data-k="image">Rasm</button><button data-k="audio">Ovoz va boshqa</button><button data-k="all">Hammasi</button>
@@ -229,6 +269,30 @@ footer.composer .wrap { padding-top: 10px; padding-bottom: 10px; }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
 <script>
 "use strict";
+/* ---------- ikonkalar (chiziqli, 24x24) ---------- */
+const ICONS = {
+  menu: '<path d="M4 6h16M4 12h16M4 18h10"/>',
+  sync: '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>',
+  settings: '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2.5"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
+  redo: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6M14 11v6"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  sparkle: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 16v4M17 18h4"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>',
+  asterisk: '<path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/>',
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="1.6"/><path d="m21 15-5-5L5 21"/>',
+  audio: '<path d="M4 10v4M8 6v12M12 3v18M16 8v8M20 11v2"/>',
+  other: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>'
+};
+const ic = n => '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[n] + "</svg>";
+document.querySelectorAll("[data-ic]").forEach(el => el.insertAdjacentHTML("afterbegin", ic(el.dataset.ic)));
+
 /* ---------- yordamchilar ---------- */
 const $ = s => document.querySelector(s);
 const LS = {
@@ -497,9 +561,12 @@ async function deleteChat(id) {
 }
 
 /* ---------- ko'rinish ---------- */
+const ab = (act, icon, title) => '<button class="ab" data-act="' + act + '" title="' + title + '" aria-label="' + title + '">' + ic(icon) + "</button>";
 function msgHtml(m) {
   const isU = m.role === "user";
-  const who = isU ? (m.by === "claude" ? "CLAUDE" : "MEN") : "GEMINI";
+  const claude = m.by === "claude";
+  const who = isU ? (claude ? "Claude" : "Men") : "Gemini";
+  const av = '<span class="tile sm ' + (isU ? (claude ? "cl" : "me") : "gem") + '">' + ic(isU ? (claude ? "asterisk" : "user") : "sparkle") + "</span>";
   const sub = [m.model, m.ts ? fmt(m.ts) : ""].filter(Boolean).join(" · ");
   let tags = "";
   if (m.edited) tags += '<span class="tag">tahrirlangan</span>';
@@ -512,36 +579,40 @@ function msgHtml(m) {
   }
   let acts;
   if (state.editing === m.id) {
-    acts = '<button class="go" data-act="save">Saqlash</button><button data-act="cancel">Bekor</button>';
+    acts = '<button class="ab txt go" data-act="save">' + ic("check") + 'Saqlash</button><button class="ab txt" data-act="cancel">' + ic("x") + "Bekor</button>";
   } else {
-    acts = '<button data-act="copy">Nusxa</button><button data-act="edit">Tahrir</button>';
-    if (!isU) acts += '<button data-act="regen">Qayta</button>';
-    if (isU && m.pending) acts += '<button class="go" data-act="answer">Javob olish</button>';
-    acts += '<button class="' + (state.armed === m.id ? "warn" : "") + '" data-act="del">' + (state.armed === m.id ? "Aniqmi?" : "O'chirish") + "</button>";
+    acts = ab("copy", "copy", "Nusxa") + ab("edit", "pencil", "Tahrir");
+    if (!isU) acts += ab("regen", "redo", "Qayta javob");
+    if (isU && m.pending) acts += '<button class="ab txt go" data-act="answer">' + ic("sparkle") + "Javob olish</button>";
+    acts += state.armed === m.id
+      ? '<button class="ab txt warn" data-act="del">Aniqmi?</button>'
+      : ab("del", "trash", "O'chirish");
   }
   let prev = "";
   if (m.prev && m.prev.length) {
     prev = '<details class="prev"><summary>Eski variantlar (' + m.prev.length + ")</summary>" +
       m.prev.map(t => '<div class="old">' + esc(t) + "</div>").join("") + "</details>";
   }
-  return '<article class="msg ' + (isU ? "user" : "model") + (m.by === "claude" ? " by-claude" : "") + '" data-id="' + esc(m.id) + '">' +
-    '<div class="meta"><span class="who">' + who + "</span><span>" + esc(sub) + "</span>" + tags + "</div>" +
+  return '<article class="msg ' + (isU ? "user" : "model") + '" data-id="' + esc(m.id) + '">' +
+    '<div class="meta">' + av + '<span class="who">' + who + "</span><span>" + esc(sub) + "</span>" + tags + "</div>" +
     body + prev + '<div class="acts">' + acts + "</div></article>";
 }
+const hero = (icon, title, text, extra) => '<div class="hero"><span class="tile big gem">' + ic(icon) + "</span><h2>" + title + "</h2><p>" + text + "</p>" + (extra || "") + "</div>";
 function renderMsgs() {
   const box = $("#msgsInner");
   if (!canRead()) {
-    box.innerHTML = '<div class="onboard"><h2>Boshlash</h2><ol><li>Sozlamalarda Gemini API key kiriting va modellarni yuklang.</li><li>GitHub token kiriting. Chatlar shu token orqali private repo\'ga yoziladi.</li><li>Sync bosing.</li></ol><button class="btn" data-go="settings">Sozlamalarni ochish</button></div>';
+    box.innerHTML = hero("sparkle", "Gemini Chat", "Boshlash uchun Gemini API key va GitHub token kerak. Chatlar private repo'da saqlanadi.",
+      '<button class="btn" data-go="settings">' + ic("settings") + "Sozlamalarni ochish</button>");
     return;
   }
   const chat = curChat();
   if (!chat) {
-    box.innerHTML = '<div class="empty">' + (state.loaded ? "Yangi chat. Birinchi xabaringizni pastga yozing." : "Yuklanmoqda…") + "</div>";
+    box.innerHTML = state.loaded ? hero("chat", "Yangi chat", "Birinchi xabaringizni pastga yozing.") : hero("sync", "Yuklanmoqda", "Chatlar repo'dan olinmoqda…");
     return;
   }
   let h = chat.messages.map(msgHtml).join("");
-  if (!chat.messages.length) h = '<div class="empty">Bu chat bo\'sh.</div>';
-  if (state.thinking === chat.id) h += '<div class="thinking">Gemini o\'ylamoqda…</div>';
+  if (!chat.messages.length) h = hero("chat", "Bu chat bo'sh", "Birinchi xabaringizni pastga yozing.");
+  if (state.thinking === chat.id) h += '<div class="thinking"><span class="dots"><i></i><i></i><i></i></span>Gemini o\'ylamoqda</div>';
   box.innerHTML = h;
   box.querySelectorAll(".md pre").forEach(pre => {
     const b = document.createElement("button"); b.className = "cpy"; b.dataset.act = "copycode"; b.textContent = "Nusxa"; pre.appendChild(b);
@@ -553,7 +624,8 @@ function renderHeader() {
   $("#title").textContent = chat ? chat.title : "Yangi chat";
   $("#send").disabled = state.busy;
   $("#btnSync").disabled = state.busy;
-  $("#modelChip").textContent = "model: " + (cfg.model || "tanlanmagan");
+  $("#btnSync").classList.toggle("spin", state.busy);
+  $("#modelName").textContent = cfg.model || "model tanlanmagan";
   const n = pendings().length;
   const bn = $("#banner");
   if (n && !state.busy && canRead()) {
@@ -564,11 +636,12 @@ function renderHeader() {
 function renderDrawer() {
   const ul = $("#chatList");
   const list = sortedChats();
-  ul.innerHTML = list.length ? list.map(c =>
-    '<li class="' + (c.id === state.cur ? "cur" : "") + '" data-id="' + esc(c.id) + '"><button class="pick" data-d="pick"><span class="t">' + esc(c.title || c.id) +
-    '</span><span class="s">' + (c.updated ? fmt(c.updated) : "") + " · " + c.messages.length + ' xabar</span></button>' +
-    '<button class="x ' + (state.armed === "chat:" + c.id ? "arm" : "") + '" data-d="del">' + (state.armed === "chat:" + c.id ? "Aniqmi?" : "O'chirish") + "</button></li>"
-  ).join("") : '<li style="padding:12px;color:var(--muted)">Hali chat yo\'q</li>';
+  ul.innerHTML = list.length ? list.map(c => {
+    const armed = state.armed === "chat:" + c.id;
+    return '<li class="' + (c.id === state.cur ? "cur" : "") + '" data-id="' + esc(c.id) + '"><button class="pick" data-d="pick"><span class="tile">' + ic("chat") + '</span><span class="tx"><span class="t">' + esc(c.title || c.id) +
+      '</span><span class="s">' + (c.updated ? fmt(c.updated) : "") + " · " + c.messages.length + ' xabar</span></span></button>' +
+      '<button class="x ' + (armed ? "arm" : "") + '" data-d="del" aria-label="O\'chirish">' + (armed ? "Aniqmi?" : ic("trash")) + "</button></li>";
+  }).join("") : '<li style="padding:12px;color:var(--muted)">Hali chat yo\'q</li>';
 }
 function render() {
   if (state.editing) { renderHeader(); renderDrawer(); return renderMsgs(); }
@@ -611,6 +684,7 @@ $("#send").addEventListener("click", send);
 $("#input").addEventListener("input", autosize);
 $("#input").addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
 $("#btnSync").addEventListener("click", syncNow);
+$("#btnSettings").addEventListener("click", openSettings);
 $("#bannerBtn").addEventListener("click", () => withBusy(runPendings));
 $("#modelChip").addEventListener("click", () => openPicker());
 
@@ -649,7 +723,8 @@ function startRename() {
 /* sozlamalar */
 function openSettings() {
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
-  $("#s-branch").value = cfg.branch; $("#s-modelBtn").textContent = cfg.model || "Tanlanmagan. Bosib tanlang";
+  $("#s-branch").value = cfg.branch;
+  $("#s-modelBtn").innerHTML = ic("sparkle") + "<span>" + esc(cfg.model || "Tanlanmagan. Bosib tanlang") + "</span>";
   $("#drawer").hidden = true; $("#picker").hidden = true; $("#settings").hidden = false; $("#scrim").hidden = false;
 }
 function closeSettings() { $("#settings").hidden = true; $("#scrim").hidden = true; }
@@ -664,6 +739,7 @@ $("#btnSave").addEventListener("click", async () => {
 
 /* ---------- model tanlash ---------- */
 const kindOf = id => /image/i.test(id) ? "image" : /tts|audio|live|dialog/i.test(id) ? "audio" : /robotics|computer-use|aqa/i.test(id) ? "other" : "text";
+const KICON = { text: "sparkle", image: "image", audio: "audio", other: "other" };
 const isTrial = id => /preview|exp/i.test(id);
 function tagsOf(id) {
   const t = [];
@@ -681,7 +757,7 @@ function renderPicker() {
     .sort((a, b) => (isTrial(a.id) - isTrial(b.id)) || b.id.localeCompare(a.id, undefined, { numeric: true }));
   let h = "";
   if (raw && !state.models.some(m => m.id.toLowerCase() === q))
-    h += '<li data-id="' + esc(raw) + '"><button class="pick" data-p="custom"><span class="t">"' + esc(raw) + '" ni ishlatish</span><span class="id">ro\'yxatda yo\'q, nomi qo\'lda</span></button></li>';
+    h += '<li data-id="' + esc(raw) + '"><button class="pick" data-p="custom"><span class="tile k-other">' + ic("plus") + '</span><span class="tx"><span class="t">"' + esc(raw) + '" ni ishlatish</span><span class="id">ro\'yxatda yo\'q, nomi qo\'lda</span></span></button></li>';
   h += list.map(m => {
     const k = kindOf(m.id), t = state.tests[m.id];
     let tags = tagsOf(m.id).map(x => '<span class="tag">' + x + "</span>").join("");
@@ -691,8 +767,8 @@ function renderPicker() {
     let st = "";
     if (t) st = t.ok ? '<span class="st ok">✓ ishladi · ' + fmt(t.ts) + "</span>"
       : '<span class="st bad">✗ ' + (t.code === 429 ? "limit yoki kvota yo'q" : "xato") + (t.msg ? " · " + esc(t.msg) : "") + "</span>";
-    return '<li class="' + (m.id === cfg.model ? "cur" : "") + '" data-id="' + esc(m.id) + '"><button class="pick" data-p="pick"><span class="t">' + esc(m.name || m.id) +
-      '</span><span class="id">' + esc(m.id) + '</span><span class="m2">' + tags + st + "</span></button>" +
+    return '<li class="' + (m.id === cfg.model ? "cur" : "") + '" data-id="' + esc(m.id) + '"><button class="pick" data-p="pick"><span class="tile k-' + k + '">' + ic(KICON[k]) + '</span><span class="tx"><span class="t">' + esc(m.name || m.id) +
+      '</span><span class="id">' + esc(m.id) + '</span><span class="m2">' + tags + st + "</span></span></button>" +
       '<button class="x" data-p="test">' + (state.testing === m.id ? "…" : "Sinash") + "</button></li>";
   }).join("");
   if (!list.length && !raw) h = '<li class="note">' + (state.models.length ? "Bu turda model yo'q. Boshqa turni tanlang." : "Modellar ro'yxati yo'q. Yangilash ni bosing.") + "</li>";
