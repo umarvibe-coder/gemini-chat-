@@ -143,6 +143,26 @@ footer.composer .wrap { padding-top: 10px; padding-bottom: 10px; }
 .sheet .help { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
 .sheet .help a { color: var(--accent); }
 .sheet .actions { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+.modelbtn { width: 100%; text-align: left; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); font: 400 14px var(--mono); overflow-wrap: anywhere; }
+.picker { display: flex; flex-direction: column; height: min(86dvh, 760px); }
+.phead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.picker input { margin-bottom: 8px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.chips button { border: 1px solid var(--line); background: none; border-radius: 99px; padding: 7px 12px; font: 500 12px var(--mono); color: var(--muted); }
+.chips button.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.plist { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; }
+.plist li { display: flex; align-items: flex-start; border-radius: 8px; }
+.plist li.cur { background: var(--bg); }
+.plist .pick { flex: 1; min-width: 0; text-align: left; border: 0; background: none; padding: 10px 8px; }
+.plist .t { display: block; font-weight: 500; overflow-wrap: anywhere; }
+.plist .id { display: block; font: 400 12px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.plist .m2 { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 5px; align-items: center; }
+.plist .x { flex: none; border: 0; background: none; color: var(--accent); font: 500 12px var(--mono); padding: 12px 10px; border-radius: 6px; }
+.plist .note { padding: 12px 8px; color: var(--muted); font-size: 14px; }
+.st { font: 400 12px var(--mono); } .st.ok { color: var(--claude); } .st.bad { color: var(--danger); }
+.tag.warn { color: var(--danger); border-color: var(--danger); }
+.tag.cur { color: var(--accent); border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -180,10 +200,8 @@ footer.composer .wrap { padding-top: 10px; padding-bottom: 10px; }
   <input id="s-gkey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
   <p class="help"><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> sahifasida yaratiladi. Faqat shu telefonning brauzerida saqlanadi.</p>
 
-  <label for="s-model">MODEL</label>
-  <input id="s-model" list="modelList" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Modellarni yuklang yoki nomini yozing">
-  <datalist id="modelList"></datalist>
-  <div class="actions"><button class="btn alt" id="btnModels">Modellarni yuklash</button></div>
+  <label>MODEL</label>
+  <button class="modelbtn" id="s-modelBtn" type="button"></button>
 
   <label for="s-gh">GITHUB TOKEN</label>
   <input id="s-gh" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
@@ -195,6 +213,16 @@ footer.composer .wrap { padding-top: 10px; padding-bottom: 10px; }
   <input id="s-branch" autocomplete="off" autocapitalize="off" spellcheck="false">
 
   <div class="actions"><button class="btn" id="btnSave">Saqlash</button><button class="btn alt" id="btnClose">Yopish</button></div>
+</section>
+
+<section class="sheet picker" id="picker" hidden>
+  <div class="phead"><h2>Model tanlash</h2><button class="btn alt" id="p-reload">Yangilash</button></div>
+  <input id="p-q" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Qidirish yoki model nomini yozing">
+  <div class="chips" id="p-chips">
+    <button data-k="text">Matn</button><button data-k="image">Rasm</button><button data-k="audio">Ovoz va boshqa</button><button data-k="all">Hammasi</button>
+  </div>
+  <ul class="plist" id="p-list"></ul>
+  <div class="actions"><button class="btn alt" id="p-close">Yopish</button></div>
 </section>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
@@ -225,7 +253,9 @@ const state = {
   chats: new Map(),            // id -> {chat, sha}
   cur: null, draft: false, busy: false, thinking: null, editing: null,
   armed: null, loaded: false,
-  models: (() => { try { return JSON.parse(LS.get("models") || "[]"); } catch (e) { return []; } })()
+  models: (() => { try { return JSON.parse(LS.get("models") || "[]").map(x => typeof x === "string" ? { id: x, name: x } : x); } catch (e) { return []; } })(),
+  tests: (() => { try { return JSON.parse(LS.get("tests") || "{}"); } catch (e) { return {}; } })(),
+  pickKind: "text", pickFrom: null, testing: null
 };
 const canRead = () => !!(cfg.ghtoken && cfg.repo);
 const canGen = () => !!(cfg.gkey && cfg.model);
@@ -370,9 +400,9 @@ async function loadModels() {
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error("Gemini " + r.status + ": " + ((j.error && j.error.message) || "xato"));
   state.models = (j.models || []).filter(m => (m.supportedGenerationMethods || []).includes("generateContent"))
-    .map(m => m.name.replace(/^models\//, "")).sort();
+    .map(m => ({ id: m.name.replace(/^models\//, ""), name: m.displayName || m.name.replace(/^models\//, ""), inTok: m.inputTokenLimit }));
   LS.set("models", JSON.stringify(state.models));
-  fillModelList();
+  renderPicker();
   toast(state.models.length + " ta model topildi");
 }
 
@@ -577,11 +607,11 @@ $("#input").addEventListener("input", autosize);
 $("#input").addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
 $("#btnSync").addEventListener("click", syncNow);
 $("#bannerBtn").addEventListener("click", () => withBusy(runPendings));
-$("#modelChip").addEventListener("click", openSettings);
+$("#modelChip").addEventListener("click", () => openPicker());
 
 function openDrawer(on) { $("#drawer").hidden = !on; $("#scrim").hidden = !on && $("#settings").hidden; if (on) renderDrawer(); }
 $("#btnList").addEventListener("click", () => openDrawer(true));
-$("#scrim").addEventListener("click", () => { $("#drawer").hidden = true; $("#settings").hidden = true; $("#scrim").hidden = true; });
+$("#scrim").addEventListener("click", () => { $("#drawer").hidden = true; $("#settings").hidden = true; $("#picker").hidden = true; $("#scrim").hidden = true; });
 $("#btnNew").addEventListener("click", () => { state.cur = null; state.draft = true; state.editing = null; openDrawer(false); render(); $("#input").focus(); });
 $("#chatList").addEventListener("click", async ev => {
   const b = ev.target.closest("[data-d]"); if (!b) return;
@@ -612,28 +642,101 @@ function startRename() {
 }
 
 /* sozlamalar */
-function fillModelList() { $("#modelList").innerHTML = state.models.map(m => '<option value="' + esc(m) + '">').join(""); }
 function openSettings() {
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
-  $("#s-branch").value = cfg.branch; $("#s-model").value = cfg.model; fillModelList();
-  $("#drawer").hidden = true; $("#settings").hidden = false; $("#scrim").hidden = false;
+  $("#s-branch").value = cfg.branch; $("#s-modelBtn").textContent = cfg.model || "Tanlanmagan. Bosib tanlang";
+  $("#drawer").hidden = true; $("#picker").hidden = true; $("#settings").hidden = false; $("#scrim").hidden = false;
 }
 function closeSettings() { $("#settings").hidden = true; $("#scrim").hidden = true; }
 $("#btnClose").addEventListener("click", closeSettings);
-$("#btnModels").addEventListener("click", async () => {
-  cfg.gkey = $("#s-gkey").value.trim();
-  try { await loadModels(); } catch (e) { toast(e.message, "err"); }
-});
 $("#btnSave").addEventListener("click", async () => {
   cfg.gkey = $("#s-gkey").value.trim(); cfg.ghtoken = $("#s-gh").value.trim();
-  cfg.repo = $("#s-repo").value.trim(); cfg.branch = $("#s-branch").value.trim() || "main"; cfg.model = $("#s-model").value.trim();
-  ["gkey", "ghtoken", "repo", "branch", "model"].forEach(k => LS.set(k, cfg[k]));
+  cfg.repo = $("#s-repo").value.trim(); cfg.branch = $("#s-branch").value.trim() || "main";
+  ["gkey", "ghtoken", "repo", "branch"].forEach(k => LS.set(k, cfg[k]));
   closeSettings(); render();
   if (canRead()) syncNow();
 });
 
+/* ---------- model tanlash ---------- */
+const kindOf = id => /image/i.test(id) ? "image" : /tts|audio|live|dialog/i.test(id) ? "audio" : /robotics|computer-use|aqa/i.test(id) ? "other" : "text";
+const isTrial = id => /preview|exp/i.test(id);
+function tagsOf(id) {
+  const t = [];
+  if (isTrial(id)) t.push("sinov");
+  if (/lite/i.test(id)) t.push("yengil"); else if (/flash/i.test(id)) t.push("tez"); else if (/pro/i.test(id)) t.push("kuchli");
+  if (/gemma/i.test(id)) t.push("ochiq model");
+  return t;
+}
+const fmtTok = n => !n ? "" : n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M" : Math.round(n / 1000) + "K";
+function renderPicker() {
+  const raw = $("#p-q").value.trim(), q = raw.toLowerCase(), kind = state.pickKind;
+  document.querySelectorAll("#p-chips button").forEach(b => b.classList.toggle("on", b.dataset.k === kind));
+  const okKind = k => kind === "all" || (kind === "audio" ? (k === "audio" || k === "other") : k === kind);
+  const list = state.models.filter(m => okKind(kindOf(m.id)) && (!q || m.id.toLowerCase().includes(q) || (m.name || "").toLowerCase().includes(q)))
+    .sort((a, b) => (isTrial(a.id) - isTrial(b.id)) || b.id.localeCompare(a.id, undefined, { numeric: true }));
+  let h = "";
+  if (raw && !state.models.some(m => m.id.toLowerCase() === q))
+    h += '<li data-id="' + esc(raw) + '"><button class="pick" data-p="custom"><span class="t">"' + esc(raw) + '" ni ishlatish</span><span class="id">ro\'yxatda yo\'q, nomi qo\'lda</span></button></li>';
+  h += list.map(m => {
+    const k = kindOf(m.id), t = state.tests[m.id];
+    let tags = tagsOf(m.id).map(x => '<span class="tag">' + x + "</span>").join("");
+    if (k !== "text") tags += '<span class="tag warn">matn chat uchun emas</span>';
+    if (m.id === cfg.model) tags = '<span class="tag cur">tanlangan</span>' + tags;
+    const lim = fmtTok(m.inTok); if (lim) tags += '<span class="st">' + lim + " kontekst</span>";
+    let st = "";
+    if (t) st = t.ok ? '<span class="st ok">✓ ishladi · ' + fmt(t.ts) + "</span>"
+      : '<span class="st bad">✗ ' + (t.code === 429 ? "limit yoki kvota yo'q" : "xato") + (t.msg ? " · " + esc(t.msg) : "") + "</span>";
+    return '<li class="' + (m.id === cfg.model ? "cur" : "") + '" data-id="' + esc(m.id) + '"><button class="pick" data-p="pick"><span class="t">' + esc(m.name || m.id) +
+      '</span><span class="id">' + esc(m.id) + '</span><span class="m2">' + tags + st + "</span></button>" +
+      '<button class="x" data-p="test">' + (state.testing === m.id ? "…" : "Sinash") + "</button></li>";
+  }).join("");
+  if (!list.length && !raw) h = '<li class="note">' + (state.models.length ? "Bu turda model yo'q. Boshqa turni tanlang." : "Modellar ro'yxati yo'q. Yangilash ni bosing.") + "</li>";
+  $("#p-list").innerHTML = h;
+}
+function openPicker(from) {
+  if (!cfg.gkey) { toast("Avval Gemini key kiriting", "err"); openSettings(); return; }
+  state.pickFrom = from || null;
+  $("#drawer").hidden = true; $("#settings").hidden = true; $("#picker").hidden = false; $("#scrim").hidden = false;
+  if (!state.models.length) loadModels().catch(e => toast(e.message, "err"));
+  renderPicker();
+}
+function closePicker() {
+  $("#picker").hidden = true; $("#scrim").hidden = true;
+  if (state.pickFrom === "settings") openSettings();
+}
+function pickModel(id) {
+  cfg.model = id; LS.set("model", id);
+  const warn = kindOf(id) !== "text";
+  closePicker(); render();
+  toast(warn ? "Model: " + id + ". Bu matn chat uchun emas, javob bo'sh chiqishi mumkin." : "Model: " + id);
+}
+async function runTest(id) {
+  state.testing = id; renderPicker();
+  try {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(id) + ":generateContent", {
+      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.gkey },
+      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "ok" }] }], generationConfig: { maxOutputTokens: 16 } })
+    });
+    const j = await r.json().catch(() => ({}));
+    state.tests[id] = r.ok ? { ok: true, ts: Date.now() }
+      : { ok: false, ts: Date.now(), code: r.status, msg: String((j.error && j.error.message) || "HTTP " + r.status).slice(0, 90) };
+  } catch (e) { state.tests[id] = { ok: false, ts: Date.now(), code: 0, msg: "ulanib bo'lmadi" }; }
+  LS.set("tests", JSON.stringify(state.tests));
+  state.testing = null; renderPicker();
+}
+$("#s-modelBtn").addEventListener("click", () => { cfg.gkey = $("#s-gkey").value.trim(); LS.set("gkey", cfg.gkey); openPicker("settings"); });
+$("#p-close").addEventListener("click", closePicker);
+$("#p-reload").addEventListener("click", () => loadModels().catch(e => toast(e.message, "err")));
+$("#p-q").addEventListener("input", renderPicker);
+$("#p-chips").addEventListener("click", ev => { const b = ev.target.closest("[data-k]"); if (b) { state.pickKind = b.dataset.k; renderPicker(); } });
+$("#p-list").addEventListener("click", ev => {
+  const b = ev.target.closest("[data-p]"); if (!b) return;
+  const id = b.closest("li").dataset.id;
+  if (b.dataset.p === "test") runTest(id); else pickModel(id);
+});
+
 /* ---------- boshlash ---------- */
-fillModelList(); render(); autosize();
+render(); autosize();
 if (canRead()) {
   withBusy(async () => { await refreshAll(); }).then(() => { render(); scrollEnd(); });
 }
