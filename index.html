@@ -118,7 +118,7 @@ footer.composer .wrap { padding-top: 10px; padding-bottom: 10px; }
 
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
   max-width: min(92vw, 520px); background: var(--ink); color: var(--bg); padding: 10px 14px; border-radius: 10px;
-  font-size: 14px; z-index: 40; overflow-wrap: anywhere; }
+  font-size: 14px; z-index: 40; overflow-wrap: anywhere; max-height: 35vh; overflow-y: auto; }
 .toast.err { background: var(--danger); color: #fff; }
 
 .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 20; }
@@ -234,6 +234,7 @@ function toast(msg, kind) {
   const t = $("#toast");
   clearTimeout(toast._t);
   if (!msg) { t.hidden = true; return; }
+  if (msg.length > 220) msg = msg.slice(0, 220) + "…";
   t.textContent = msg; t.className = "toast" + (kind ? " " + kind : ""); t.hidden = false;
   if (kind !== "err") toast._t = setTimeout(() => { t.hidden = true; }, 3000);
 }
