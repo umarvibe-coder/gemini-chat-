@@ -166,6 +166,20 @@ details.prev .old { white-space: pre-wrap; border-left: 3px solid var(--line); p
 .vis details summary { cursor: pointer; font: 700 12px var(--sans); color: var(--muted); padding: 4px 2px; }
 .vis pre { margin: 6px 0; max-height: 40vh; overflow: auto; background: var(--code); border-radius: 12px; padding: 10px 12px; font: 400 12.5px/1.5 var(--codefont); white-space: pre-wrap; overflow-wrap: anywhere; }
 
+/* katta ko'rish */
+.viewer { position: fixed; inset: 0; z-index: 60; background: rgba(15, 18, 40, .5); display: flex; align-items: flex-end; justify-content: center; }
+.vwsheet { width: 100%; max-width: 900px; height: 92dvh; background: var(--surface); border-radius: 26px 26px 0 0; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom, 0px); user-select: none; -webkit-user-select: none; }
+.vwhead { display: flex; align-items: center; gap: 8px; padding: 14px 10px 8px 20px; }
+.vwhead .t { flex: 1; min-width: 0; font: 800 17px var(--sans); overflow-wrap: anywhere; }
+.vwbody { flex: 1; min-height: 0; position: relative; overflow: hidden; touch-action: none; background: var(--bg); margin: 0 12px; border-radius: 16px; cursor: grab; }
+.vwstage { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.vwbar { display: flex; align-items: center; gap: 2px; padding: 10px 10px 12px; }
+.vwbar .grow { flex: 1; }
+.vwbar .ibtn { background: var(--bg); border-radius: 14px; margin: 0 2px; }
+.vwbar .ibtn:disabled { opacity: .35; }
+.vwcount { min-width: 54px; text-align: center; font: 800 15px var(--sans); }
+.vbody[data-act] { cursor: zoom-in; }
+
 /* pastki panel */
 footer.composer { flex: none; padding-bottom: env(safe-area-inset-bottom, 0px);
   background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
@@ -308,6 +322,21 @@ footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
   <div class="actions"><button class="btn alt" id="p-close">Yopish</button></div>
 </section>
 
+<div class="viewer" id="viewer" hidden>
+  <section class="vwsheet" role="dialog" aria-modal="true" aria-label="Katta ko'rish">
+    <div class="vwhead"><span class="t" id="vwTitle"></span><button class="ibtn" id="vwClose" data-ic="x" aria-label="Yopish" title="Yopish"></button></div>
+    <div class="vwbody" id="vwBody"><div class="vwstage" id="vwStage"></div></div>
+    <div class="vwbar">
+      <button class="ibtn" id="vwPrev" data-ic="chevl" aria-label="Oldingisi"></button><span id="vwCount" class="vwcount"></span><button class="ibtn" id="vwNext" data-ic="chevr" aria-label="Keyingisi"></button>
+      <span class="grow"></span>
+      <button class="ibtn" id="vwOut" data-ic="minus" aria-label="Kichiklashtirish"></button>
+      <button class="ibtn" id="vwIn" data-ic="plus" aria-label="Kattalashtirish"></button>
+      <button class="ibtn" id="vwFit" data-ic="fit" aria-label="Sig'dirish"></button>
+      <button class="ibtn" id="vwDl" data-ic="download" aria-label="SVG yuklash"></button>
+    </div>
+  </section>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.9/purify.min.js"></script>
 <script>
@@ -336,6 +365,11 @@ const ICONS = {
   upload: '<path d="M12 15V4M7 9l5-5 5 5M5 21h14"/>',
   chart: '<path d="M3 3v18h18"/><path d="M7 15v3M12 9v9M17 5v13"/>',
   diagram: '<rect x="3" y="3" width="7" height="6" rx="1.5"/><rect x="14" y="15" width="7" height="6" rx="1.5"/><path d="M6.5 9v3.5a2 2 0 0 0 2 2H14M10 18h0"/>',
+  chevl: '<path d="m15 18-6-6 6-6"/>',
+  chevr: '<path d="m9 18 6-6-6-6"/>',
+  minus: '<path d="M5 12h14"/>',
+  fit: '<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/>',
+  expand: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
   other: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>'
 };
 const ic = n => '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[n] + "</svg>";
@@ -664,11 +698,11 @@ function visualHtml(m) {
   if (!m.visuals || !m.visuals.length) return "";
   return '<div class="visuals">' + m.visuals.map((v, i) => {
     let inner;
-    if (v.kind === "chart") inner = '<div class="vbody">' + chartSvg(v) + "</div>";
+    if (v.kind === "chart") inner = '<div class="vbody" data-act="vopen">' + chartSvg(v) + "</div>";
     else { const c = mm.cache.get((isDark() ? "d|" : "l|") + v.code);
-      inner = '<div class="vbody mmd" data-mid="' + esc(m.id) + '" data-vi="' + i + '"' + (c ? ' data-done="1"' : "") + ">" + (c || '<div class="verr">Diagramma chizilmoqda…</div>') + "</div>"; }
+      inner = '<div class="vbody mmd" data-act="vopen" data-mid="' + esc(m.id) + '" data-vi="' + i + '"' + (c ? ' data-done="1"' : "") + ">" + (c || '<div class="verr">Diagramma chizilmoqda…</div>') + "</div>"; }
     return '<div class="vis" data-vi="' + i + '"><div class="vhead"><span class="tile sm ' + (v.kind === "chart" ? "k-image" : "k-audio") + '">' + ic(v.kind === "chart" ? "chart" : "diagram") + '</span><span class="t">' + esc(v.title) + "</span>" +
-      '<button class="ab" data-act="vdl" title="SVG sifatida yuklash" aria-label="SVG sifatida yuklash">' + ic("download") + "</button></div>" + inner +
+      '<button class="ab" data-act="vopen" title="Katta ko\'rish" aria-label="Katta ko\'rish">' + ic("expand") + '</button><button class="ab" data-act="vdl" title="SVG sifatida yuklash" aria-label="SVG sifatida yuklash">' + ic("download") + "</button></div>" + inner +
       "<details><summary>Manba</summary><pre>" + esc(v.kind === "chart" ? JSON.stringify({ type: v.type, labels: v.labels, series: v.series, unit: v.unit }, null, 1) : v.code) + "</pre></details></div>";
   }).join("") + "</div>";
 }
@@ -684,6 +718,86 @@ function downloadVisual(m, vi) {
   toast("Yuklab olindi");
 }
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => render());
+
+/* ---------- katta ko'rish oynasi: kattalashtirish, kichiklashtirish, surish ---------- */
+const vw = { m: null, i: 0, s: 1, x: 0, y: 0, s0: 1, w: 0, h: 0, pts: new Map(), lastD: 0, lastC: null, tapT: 0, tapMoved: 0, tapAt: 0 };
+const vwBody = () => $("#vwBody");
+function vwApply() { $("#vwStage").style.transform = "translate(" + vw.x + "px," + vw.y + "px) scale(" + vw.s + ")"; }
+function vwZoomAt(cx, cy, ns) {
+  ns = Math.max(vw.s0 * 0.4, Math.min(ns, 14));
+  vw.x = cx - (cx - vw.x) * ns / vw.s; vw.y = cy - (cy - vw.y) * ns / vw.s; vw.s = ns; vwApply();
+}
+function vwFit() {
+  const r = vwBody().getBoundingClientRect();
+  vw.s = vw.s0; vw.x = (r.width - vw.w * vw.s) / 2; vw.y = (r.height - vw.h * vw.s) / 2; vwApply();
+}
+function vwSvgFor(v) {
+  if (v.kind === "chart") return chartSvg(v);
+  const c = mm.cache.get((isDark() ? "d|" : "l|") + v.code); return c || "";
+}
+function vwShow() {
+  const v = vw.m.visuals[vw.i], n = vw.m.visuals.length;
+  $("#vwTitle").textContent = v.title; $("#vwCount").textContent = (vw.i + 1) + " / " + n;
+  $("#vwPrev").disabled = vw.i === 0; $("#vwNext").disabled = vw.i === n - 1;
+  const st = $("#vwStage"), svg = vwSvgFor(v);
+  st.innerHTML = svg || '<div class="verr">Diagramma hali chizilmagan</div>';
+  const el = st.querySelector("svg"), r = vwBody().getBoundingClientRect();
+  if (!el) { vw.w = r.width; vw.h = 80; vw.s0 = 1; st.style.width = r.width + "px"; vwFit(); return; }
+  const vb = el.viewBox && el.viewBox.baseVal && el.viewBox.baseVal.width ? el.viewBox.baseVal : { width: r.width, height: r.height };
+  const w = r.width - 8, h = w * vb.height / vb.width;
+  el.removeAttribute("width"); el.removeAttribute("height"); el.style.cssText = "width:" + w + "px;height:" + h + "px;max-width:none;display:block";
+  st.style.width = w + "px"; st.style.height = h + "px"; vw.w = w; vw.h = h;
+  vw.s0 = Math.min(1, (r.height - 8) / h); vwFit();
+}
+function openViewer(m, i) {
+  vw.m = m; vw.i = i; $("#viewer").hidden = false; vwShow();
+  history.pushState({ vw: 1 }, "");
+}
+function closeViewer(fromPop) {
+  if ($("#viewer").hidden) return;
+  $("#viewer").hidden = true; $("#vwStage").innerHTML = "";
+  if (!fromPop && history.state && history.state.vw) history.back();
+}
+window.addEventListener("popstate", () => closeViewer(true));
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeViewer(); });
+$("#vwClose").addEventListener("click", () => closeViewer());
+$("#viewer").addEventListener("click", e => { if (e.target.id === "viewer") closeViewer(); });
+const vwMid = () => { const r = vwBody().getBoundingClientRect(); return [r.width / 2, r.height / 2]; };
+$("#vwIn").addEventListener("click", () => { const [cx, cy] = vwMid(); vwZoomAt(cx, cy, vw.s * 1.5); });
+$("#vwOut").addEventListener("click", () => { const [cx, cy] = vwMid(); vwZoomAt(cx, cy, vw.s / 1.5); });
+$("#vwFit").addEventListener("click", vwFit);
+$("#vwPrev").addEventListener("click", () => { if (vw.i > 0) { vw.i--; vwShow(); } });
+$("#vwNext").addEventListener("click", () => { if (vw.i < vw.m.visuals.length - 1) { vw.i++; vwShow(); } });
+$("#vwDl").addEventListener("click", () => downloadVisual(vw.m, vw.i));
+vwBody().addEventListener("wheel", e => {
+  e.preventDefault(); const r = vwBody().getBoundingClientRect();
+  vwZoomAt(e.clientX - r.left, e.clientY - r.top, vw.s * Math.exp(-e.deltaY * 0.0015));
+}, { passive: false });
+const vwCenter = () => { const p = [...vw.pts.values()]; return p.length < 2 ? p[0] : { x: (p[0].x + p[1].x) / 2, y: (p[0].y + p[1].y) / 2 }; };
+const vwDist = () => { const p = [...vw.pts.values()]; return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); };
+vwBody().addEventListener("pointerdown", e => {
+  try { vwBody().setPointerCapture(e.pointerId); } catch (_) {} vw.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  vw.lastC = vwCenter(); vw.lastD = vw.pts.size > 1 ? vwDist() : 0; vw.tapMoved = 0; vw.tapT = Date.now();
+});
+vwBody().addEventListener("pointermove", e => {
+  if (!vw.pts.has(e.pointerId)) return;
+  vw.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  const c = vwCenter(), r = vwBody().getBoundingClientRect();
+  vw.x += c.x - vw.lastC.x; vw.y += c.y - vw.lastC.y; vw.tapMoved += Math.abs(c.x - vw.lastC.x) + Math.abs(c.y - vw.lastC.y);
+  if (vw.pts.size > 1) { const d = vwDist(); if (vw.lastD) vwZoomAt(c.x - r.left, c.y - r.top, vw.s * d / vw.lastD); vw.lastD = d; }
+  vw.lastC = c; vwApply();
+});
+const vwUp = e => {
+  const had = vw.pts.has(e.pointerId); vw.pts.delete(e.pointerId);
+  if (vw.pts.size) { vw.lastC = vwCenter(); vw.lastD = 0; return; }
+  if (!had || e.type === "pointercancel") return;
+  if (vw.tapMoved < 8 && Date.now() - vw.tapT < 300) {            // ikki marta bosish: yaqinlashtirish / qaytarish
+    const now = Date.now(), r = vwBody().getBoundingClientRect();
+    if (now - vw.tapAt < 350) { vw.tapAt = 0; if (vw.s > vw.s0 * 1.3) vwFit(); else vwZoomAt(e.clientX - r.left, e.clientY - r.top, Math.max(vw.s0 * 3, 2)); }
+    else vw.tapAt = now;
+  }
+};
+vwBody().addEventListener("pointerup", vwUp); vwBody().addEventListener("pointercancel", vwUp);
 
 const fmtSize = n => n < 1024 ? n + " B" : (n / 1024).toFixed(1) + " KB";
 function buildContents(chat, upto) {
@@ -959,6 +1073,7 @@ $("#msgs").addEventListener("click", async ev => {
     }
     return;
   }
+  if (act === "vopen") { const vi = +b.closest(".vis").dataset.vi; if (m.visuals[vi].kind === "diagram" && !mm.cache.get((isDark() ? "d|" : "l|") + m.visuals[vi].code)) { toast("Diagramma hali chizilmagan"); return; } openViewer(m, vi); return; }
   if (act === "vdl") { downloadVisual(m, +b.closest(".vis").dataset.vi); return; }
   if (act === "copy") copyText(m.text);
   else if (act === "edit") { state.editing = id; state.armed = null; render(); }
@@ -1021,7 +1136,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.6";
+const BUILD = "2026-11-05.7";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
