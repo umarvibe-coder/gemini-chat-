@@ -166,6 +166,24 @@ details.prev .old { white-space: pre-wrap; border-left: 3px solid var(--line); p
 .vis details summary { cursor: pointer; font: 700 12px var(--sans); color: var(--muted); padding: 4px 2px; }
 .vis pre { margin: 6px 0; max-height: 40vh; overflow: auto; background: var(--code); border-radius: 12px; padding: 10px 12px; font: 400 12.5px/1.5 var(--codefont); white-space: pre-wrap; overflow-wrap: anywhere; }
 
+/* grafik interaktivligi */
+.chart [data-sel] { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.chart .sd, .chart .tp { transition: transform .28s cubic-bezier(.3, 1.4, .5, 1), opacity .2s; }
+.chart .sd.on, .chart .tp.on { transform: translate(var(--dx), var(--dy)); }
+.chart.has-sel [data-d]:not(.on) { opacity: .34; transition: opacity .2s; }
+.chart[data-kind=pie].has-sel [data-d]:not(.on) { opacity: 1; filter: grayscale(.9) brightness(1.1); }
+.chart.one.has-sel [data-dp] { opacity: 1; }
+.chart.one.has-sel [data-dp]:not(.pick) { opacity: .4; }
+.chart .lg .bg { transition: fill-opacity .2s; }
+.chart .lg.on .bg { fill-opacity: .22; }
+.chart .lg.on text { font-weight: 800; }
+.chart .ctr.on { display: inline; }
+.chart.has-sel .ctr0 { display: none; }
+.chart .tip.pick { display: inline; }
+.chart .bar.pick { filter: brightness(1.18); }
+.chart .mk circle.m { transition: r .15s; }
+.chart .mk.pick circle.m { r: 6.6px; }
+
 /* katta ko'rish */
 .viewer { position: fixed; inset: 0; z-index: 60; background: rgba(15, 18, 40, .5); display: flex; align-items: flex-end; justify-content: center; }
 .vwsheet { width: 100%; max-width: 900px; height: 92dvh; background: var(--surface); border-radius: 26px 26px 0 0; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom, 0px); user-select: none; -webkit-user-select: none; }
@@ -617,65 +635,136 @@ const fmtN = n => { const a = Math.abs(n); return a >= 1e6 ? (n / 1e6).toFixed(1
 const clip = (s, n) => s.length > n ? s.slice(0, n - 1) + "…" : s;
 function niceStep(r) { const e = Math.pow(10, Math.floor(Math.log10(r || 1))), f = r / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * e; }
 
-function chartSvg(v) {
-  const T = themeColors(), W = 360, F = 'font-family="Nunito,system-ui,sans-serif"';
-  const t = (x, y, s, o) => '<text x="' + x + '" y="' + y + '" ' + F + ' font-size="' + ((o && o.size) || 11) + '" fill="' + ((o && o.fill) || T.muted) + '"' +
-    (o && o.anchor ? ' text-anchor="' + o.anchor + '"' : "") + (o && o.rot ? ' transform="rotate(' + o.rot + " " + x + " " + y + ')"' : "") + (o && o.bold ? ' font-weight="800"' : "") + ">" + esc(s) + "</text>";
-  const unit = v.unit ? " " + v.unit : "";
-  let body = "", H;
-  if (v.type === "pie") {
-    const vals = v.series[0].values.map(x => Math.abs(x)), tot = vals.reduce((a, b) => a + b, 0);
-    const rows = v.labels.length, cx = 95, cy = 105, R = 85, r = 46;
-    H = Math.max(210, rows * 20 + 24);
-    if (!tot) body = t(W / 2, 100, "Ma'lumot yo'q", { anchor: "middle" });
-    else {
-      let a0 = -Math.PI / 2;
-      vals.forEach((x, i) => {
-        const col = T.col(i), frac = x / tot;
-        if (frac >= 0.9999) body += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (R + r) / 2 + '" fill="none" stroke="' + col + '" stroke-width="' + (R - r) + '"/>';
-        else if (frac > 0) {
-          const a1 = a0 + frac * 2 * Math.PI, big = frac > 0.5 ? 1 : 0, P = (rr, a) => (cx + rr * Math.cos(a)).toFixed(2) + " " + (cy + rr * Math.sin(a)).toFixed(2);
-          body += '<path d="M' + P(R, a0) + " A" + R + " " + R + " 0 " + big + " 1 " + P(R, a1) + " L" + P(r, a1) + " A" + r + " " + r + " 0 " + big + " 0 " + P(r, a0) + 'Z" fill="' + col + '" stroke="' + T.surface + '" stroke-width="1.5"/>';
-          a0 = a1;
-        }
-        const y = 22 + i * 20;
-        body += '<rect x="200" y="' + (y - 9) + '" width="10" height="10" rx="3" fill="' + col + '"/>' + t(216, y, clip(v.labels[i], 14) + "  " + Math.round(frac * 100) + "%", { fill: T.ink });
-      });
-    }
-    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(v.title) + '">' + body + "</svg>";
+let chartSeq = 0;
+// Rangni to'q (f<1) yoki och (f>1) qiladi: 3D yon va usti yuzlar uchun.
+function shadeCol(c, f) {
+  let r, g, b;
+  if (c[0] === "#") { const n = parseInt(c.slice(1), 16); r = n >> 16; g = (n >> 8) & 255; b = n & 255; }
+  else {
+    const m = c.match(/hsl\((\d+),(\d+)%,(\d+)%\)/), h = +m[1] / 360, sa = +m[2] / 100, l = +m[3] / 100;
+    const q = l < 0.5 ? l * (1 + sa) : l + sa - l * sa, p = 2 * l - q;
+    const k = t => { t = ((t % 1) + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 0.5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+    r = k(h + 1 / 3) * 255; g = k(h) * 255; b = k(h - 1 / 3) * 255;
   }
-  const ns = v.series.length, n = v.labels.length, L = 46, R = 12, Tp = 14, plotH = 180, perRow = 3, legRows = ns > 1 ? Math.ceil(ns / perRow) : 0, legH = legRows ? legRows * 18 + 8 : 0;
-  const rot = n > 6, bot = rot ? 56 : 30;
-  H = Tp + plotH + bot + legH;
+  const mix = v => f < 1 ? v * f : v + (255 - v) * (f - 1);
+  return "rgb(" + [r, g, b].map(v => Math.round(Math.max(0, Math.min(255, mix(v))))).join(",") + ")";
+}
+function smoothPath(pts) {
+  let d = "M" + pts[0][0].toFixed(1) + "," + pts[0][1].toFixed(1);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    const lo = Math.min(p1[1], p2[1]), hi = Math.max(p1[1], p2[1]), cl = y => Math.max(lo, Math.min(hi, y));
+    d += " C" + (p1[0] + (p2[0] - p0[0]) / 6).toFixed(1) + "," + cl(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1) + " " +
+      (p2[0] - (p3[0] - p1[0]) / 6).toFixed(1) + "," + cl(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1) + " " + p2[0].toFixed(1) + "," + p2[1].toFixed(1);
+  }
+  return d;
+}
+function chartSvg(v) {
+  const T = themeColors(), W = 360, F = 'font-family="Nunito,system-ui,sans-serif"', id = "c" + (++chartSeq);
+  const t = (x, y, s, o) => '<text x="' + x + '" y="' + y + '" ' + F + ' font-size="' + ((o && o.size) || 11) + '" fill="' + ((o && o.fill) || T.muted) + '"' +
+    (o && o.anchor ? ' text-anchor="' + o.anchor + '"' : "") + (o && o.rot ? ' transform="rotate(' + o.rot + " " + x + " " + y + ')"' : "") + (o && o.bold ? ' font-weight="800"' : "") + ' pointer-events="none">' + esc(s) + "</text>";
+  const unit = v.unit ? " " + v.unit : "", root = (H, kind, extra) => '<svg xmlns="http://www.w3.org/2000/svg" class="chart' + (extra || "") + '" data-kind="' + kind + '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(v.title) + '">';
+  if (v.type === "pie") {
+    const vals = v.series[0].values.map(x => Math.abs(x)), tot = vals.reduce((a, b) => a + b, 0), rows = v.labels.length;
+    const cx = 98, R = 84, tilt = 0.58, Ry = R * tilt, r = 48, ry = r * tilt, D = 14, cy = Ry + 24, lx = 204, H = Math.max(cy + Ry + D + 18, rows * 20 + 28);
+    const defs = '<defs><radialGradient id="' + id + 'g" cx=".5" cy=".28" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".42"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>' +
+      '<filter id="' + id + 'b" x="-20%" y="-30%" width="140%" height="180%"><feGaussianBlur stdDeviation="5"/></filter></defs>';
+    if (!tot) return root(120, "pie") + t(W / 2, 60, "Ma'lumot yo'q", { anchor: "middle" }) + "</svg>";
+    const P = (rx, rr, a) => (cx + rx * Math.cos(a)).toFixed(2) + " " + (cy + rr * Math.sin(a)).toFixed(2);
+    const ring = (a0, a1) => {
+      const big = (a1 - a0) > Math.PI ? 1 : 0;
+      return a1 - a0 >= 2 * Math.PI - 1e-4
+        ? "M" + (cx - R) + " " + cy + "a" + R + " " + Ry + " 0 1 0 " + 2 * R + " 0a" + R + " " + Ry + " 0 1 0 " + (-2 * R) + " 0ZM" + (cx - r) + " " + cy + "a" + r + " " + ry + " 0 1 0 " + 2 * r + " 0a" + r + " " + ry + " 0 1 0 " + (-2 * r) + " 0Z"
+        : "M" + P(R, Ry, a0) + "A" + R + " " + Ry + " 0 " + big + " 1 " + P(R, Ry, a1) + "L" + P(r, ry, a1) + "A" + r + " " + ry + " 0 " + big + " 0 " + P(r, ry, a0) + "Z";
+    };
+    let sides = "", tops = "", cent = "", leg = "", a0 = -Math.PI / 2;
+    cent += '<g class="ctr0">' + t(cx, cy + 3, "Jami", { anchor: "middle", size: 11 }) + t(cx, cy + 19, fmtN(vals.reduce((a, b) => a + b, 0)) + unit, { anchor: "middle", size: 15, bold: 1, fill: T.ink }) + "</g>";
+    vals.forEach((x, i) => {
+      const col = T.col(i), frac = x / tot, a1 = a0 + frac * 2 * Math.PI, am = (a0 + a1) / 2;
+      const d = ring(a0, a1), mv = "--dx:" + (Math.cos(am) * 9).toFixed(1) + "px;--dy:" + (Math.sin(am) * 9 * tilt - 3).toFixed(1) + "px";
+      if (frac > 0) {
+        let lay = ""; const sc = shadeCol(col, 0.62); for (let k = D; k >= 1; k -= 1) lay += '<path d="' + d + '" transform="translate(0,' + k + ')" fill="' + sc + '" fill-rule="evenodd"/>';
+        sides += '<g class="sd" data-g="' + i + '" data-d data-sel="' + i + '" style="' + mv + '">' + lay + "</g>";
+        tops += '<g class="tp" data-g="' + i + '" data-d data-sel="' + i + '" style="' + mv + '"><path d="' + d + '" fill="' + col + '" fill-rule="evenodd" stroke="' + T.surface + '" stroke-width="1.4" stroke-linejoin="round"/></g>';
+      }
+      cent += '<g class="ctr" data-g="' + i + '" display="none">' + t(cx, cy + 3, clip(v.labels[i], 11), { anchor: "middle", size: 11 }) + t(cx, cy + 19, fmtN(v.series[0].values[i]) + unit, { anchor: "middle", size: 15, bold: 1, fill: T.ink }) + "</g>";
+      const y = 22 + i * 20;
+      leg += '<g class="lg" data-g="' + i + '" data-sel="' + i + '" style="cursor:pointer"><rect class="bg" x="' + (lx - 6) + '" y="' + (y - 14) + '" width="152" height="19" rx="7" fill="' + col + '" fill-opacity="0"/>' +
+        '<rect x="' + lx + '" y="' + (y - 9) + '" width="10" height="10" rx="3" fill="' + col + '"/>' + t(lx + 16, y, clip(v.labels[i], 13) + "  " + Math.round(frac * 100) + "%", { fill: T.ink }) + "</g>";
+      a0 = a1;
+    });
+    const all = ring(-Math.PI / 2, 1.5 * Math.PI);
+    return root(H, "pie") + defs + '<path d="' + (() => { const sy = cy + D + 6, ex = R * 0.96, ey = Ry * 0.92, ix = r * 1.08, iy = ry * 1.1; return "M" + (cx - ex) + " " + sy + "a" + ex + " " + ey + " 0 1 0 " + 2 * ex + " 0a" + ex + " " + ey + " 0 1 0 " + (-2 * ex) + " 0ZM" + (cx - ix) + " " + sy + "a" + ix + " " + iy + " 0 1 0 " + 2 * ix + " 0a" + ix + " " + iy + " 0 1 0 " + (-2 * ix) + " 0Z"; })() + '" fill="#000" fill-opacity=".28" fill-rule="evenodd" filter="url(#' + id + 'b)" pointer-events="none"/>' +
+      sides + tops + '<path d="' + all + '" fill="url(#' + id + 'g)" fill-rule="evenodd" pointer-events="none"/>' + cent + leg + "</svg>";
+  }
+  const ns = v.series.length, n = v.labels.length, L = 46, R = 12, Tp = 20, plotH = 180, perRow = 3, legRows = ns > 1 ? Math.ceil(ns / perRow) : 0, legH = legRows ? legRows * 18 + 8 : 0;
+  const rot = n > 6, bot = rot ? 56 : 30, H = Tp + plotH + bot + legH;
   const all = v.series.flatMap(s => s.values), lo = Math.min(0, ...all), hi = Math.max(0, ...all);
   const step = niceStep((hi - lo || 1) / 4), y0 = Math.floor(lo / step) * step, y1 = Math.max(Math.ceil(hi / step) * step, y0 + step);
   const Y = val => Tp + plotH - (val - y0) / (y1 - y0) * plotH, pw = W - L - R, gw = pw / n;
+  let defs = '<defs><filter id="' + id + 'ds" x="-10%" y="-10%" width="125%" height="130%"><feDropShadow dx="1.5" dy="2.5" stdDeviation="2" flood-color="#000" flood-opacity=".3"/></filter>' +
+    '<linearGradient id="' + id + 'bs" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".26"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".16"/></linearGradient>';
+  v.series.forEach((s, k) => { defs += '<linearGradient id="' + id + 'a' + k + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + T.col(k) + '" stop-opacity=".30"/><stop offset="1" stop-color="' + T.col(k) + '" stop-opacity="0"/></linearGradient>'; });
+  defs += "</defs>";
+  let body = "", tips = "";
   for (let g = y0; g <= y1 + step / 2; g += step) {
     const y = Y(g).toFixed(1);
-    body += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y + '" y2="' + y + '" stroke="' + T.line + '" stroke-width="1"/>' + t(L - 6, +y + 4, fmtN(g), { anchor: "end", size: 10 });
+    body += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y + '" y2="' + y + '" stroke="' + T.line + '" stroke-width="1" pointer-events="none"/>' + t(L - 6, +y + 4, fmtN(g), { anchor: "end", size: 10 });
   }
   const every = Math.ceil(n / 14);
   v.labels.forEach((lb, i) => { if (i % every) return; const x = L + gw * (i + 0.5);
     body += rot ? t(x, Tp + plotH + 14, clip(lb, 10), { anchor: "end", rot: -40, size: 10 }) : t(x, Tp + plotH + 16, clip(lb, 10), { anchor: "middle", size: 10 }); });
+  const tip = (k, i, x, y) => {
+    const txt = (ns > 1 ? v.series[k].name + " · " : "") + clip(v.labels[i], 12) + ": " + fmtN(v.series[k].values[i]) + unit, w = txt.length * 6.1 + 18;
+    const tx = Math.max(2, Math.min(W - w - 2, x - w / 2)), ty = y - 34 < 2 ? y + 12 : y - 34;
+    return '<g class="tip" data-g="' + k + ":" + i + '" display="none" pointer-events="none"><rect x="' + tx.toFixed(1) + '" y="' + ty.toFixed(1) + '" width="' + w.toFixed(1) + '" height="22" rx="8" fill="' + T.ink + '"/>' + t(tx + w / 2, ty + 15, txt, { anchor: "middle", size: 11, fill: T.surface, bold: 1 }) + "</g>";
+  };
   if (v.type === "line") {
+    let lines = "", marks = "";
     v.series.forEach((s, k) => {
-      const col = T.col(k), pts = s.values.map((val, i) => (L + gw * (i + 0.5)).toFixed(1) + "," + Y(val).toFixed(1));
-      body += '<polyline points="' + pts.join(" ") + '" fill="none" stroke="' + col + '" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>';
-      s.values.forEach((val, i) => { const x = L + gw * (i + 0.5), y = Y(val);
-        body += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3.2" fill="' + T.surface + '" stroke="' + col + '" stroke-width="2"/>';
-        if (ns === 1 && n <= 10) body += t(x, y - 8, fmtN(val), { anchor: "middle", size: 10, fill: T.ink }); });
+      const col = T.col(k), pts = s.values.map((val, i) => [L + gw * (i + 0.5), Y(val)]), d = n > 1 ? smoothPath(pts) : "M" + pts[0][0] + "," + pts[0][1];
+      const base = Y(Math.max(y0, 0)).toFixed(1);
+      lines += '<g data-sg="' + k + '" data-d filter="url(#' + id + 'ds)" pointer-events="none"><path d="' + d + " L" + pts[n - 1][0].toFixed(1) + "," + base + " L" + pts[0][0].toFixed(1) + "," + base + 'Z" fill="url(#' + id + "a" + k + ')"/>' +
+        '<path d="' + d + '" fill="none" stroke="' + col + '" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></g>';
+      s.values.forEach((val, i) => { const [x, y] = pts[i];
+        marks += '<g class="mk" data-g="' + k + ":" + i + '" data-sg="' + k + '" data-d data-dp data-sel="' + k + ":" + i + '" style="cursor:pointer"><circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="14" fill="#000" fill-opacity="0"/>' +
+          '<circle class="m" cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4.2" fill="' + T.surface + '" stroke="' + col + '" stroke-width="2.4"/></g>';
+        if (ns === 1 && n <= 10) marks += t(x, y - 10, fmtN(val), { anchor: "middle", size: 10, fill: T.ink });
+        tips += tip(k, i, x, y); });
     });
+    body += lines + marks;
   } else {
-    const bw = Math.min(30, gw * 0.8 / ns);
+    const bw = Math.min(30, gw * 0.8 / ns), dx = Math.min(7, bw * 0.3), dy = dx * 0.7, fw = Math.max(bw - 2 - dx, 4);
+    let bars = "", lab = "";
     v.series.forEach((s, k) => s.values.forEach((val, i) => {
-      const x = L + gw * (i + 0.5) - bw * ns / 2 + bw * k, ya = Y(0), yb = Y(val), top = Math.min(ya, yb), h = Math.max(Math.abs(ya - yb), 1);
-      body += '<rect x="' + x.toFixed(1) + '" y="' + top.toFixed(1) + '" width="' + (bw - 2).toFixed(1) + '" height="' + h.toFixed(1) + '" rx="4" fill="' + T.col(k) + '"/>';
-      if (ns === 1 && n <= 10) body += t(x + (bw - 2) / 2, top - 4, fmtN(val), { anchor: "middle", size: 10, fill: T.ink });
+      const col = T.col(k), x = L + gw * (i + 0.5) - bw * ns / 2 + bw * k, ya = Y(0), yb = Y(val), top = Math.min(ya, yb), bt = Math.max(ya, yb), h = Math.max(bt - top, 1.5), b2 = top + h;
+      const f = (a) => a.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+      bars += '<g class="bar" data-g="' + k + ":" + i + '" data-sg="' + k + '" data-d data-dp data-sel="' + k + ":" + i + '" style="cursor:pointer">' +
+        '<rect x="' + x.toFixed(1) + '" y="' + top.toFixed(1) + '" width="' + fw.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="' + col + '"/>' +
+        '<rect x="' + x.toFixed(1) + '" y="' + top.toFixed(1) + '" width="' + fw.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="url(#' + id + 'bs)"/>' +
+        '<polygon points="' + f([[x, top], [x + dx, top - dy], [x + fw + dx, top - dy], [x + fw, top]]) + '" fill="' + shadeCol(col, 1.3) + '"/>' +
+        '<polygon points="' + f([[x + fw, top], [x + fw + dx, top - dy], [x + fw + dx, b2 - dy], [x + fw, b2]]) + '" fill="' + shadeCol(col, 0.68) + '"/></g>';
+      if (ns === 1 && n <= 10) lab += t(x + (fw + dx) / 2, top - dy - 5, fmtN(val), { anchor: "middle", size: 10, fill: T.ink });
+      tips += tip(k, i, x + (fw + dx) / 2, top - dy);
     }));
+    body += '<g filter="url(#' + id + 'ds)">' + bars + "</g>" + lab;
   }
-  if (legH) v.series.forEach((s, k) => { const x = L + (k % perRow) * 100, yy = H - legH + 8 + Math.floor(k / perRow) * 18; body += '<rect x="' + x + '" y="' + yy + '" width="10" height="10" rx="3" fill="' + T.col(k) + '"/>' + t(x + 15, yy + 9, clip(s.name, 12), { size: 10.5, fill: T.ink }); });
-  if (unit) body += t(W - R, 9, unit.trim(), { anchor: "end", size: 10 });
-  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(v.title) + '">' + body + "</svg>";
+  let leg = "";
+  if (legH) v.series.forEach((s, k) => { const x = L + (k % perRow) * 100, yy = H - legH + 8 + Math.floor(k / perRow) * 18;
+    leg += '<g class="lg" data-sg="' + k + '" data-sel="' + k + '" style="cursor:pointer"><rect class="bg" x="' + (x - 5) + '" y="' + (yy - 4) + '" width="96" height="17" rx="6" fill="' + T.col(k) + '" fill-opacity="0"/><rect x="' + x + '" y="' + yy + '" width="10" height="10" rx="3" fill="' + T.col(k) + '"/>' + t(x + 15, yy + 9, clip(s.name, 12), { size: 10.5, fill: T.ink }) + "</g>"; });
+  if (unit) body += t(W - R, 10, unit.trim(), { anchor: "end", size: 10 });
+  return root(H, v.type, ns === 1 ? " one" : "") + defs + body + leg + tips + "</svg>";
+}
+function chartSelect(svg, key) {
+  if (!svg) return;
+  const nk = svg.getAttribute("data-cur") === key ? "" : key;
+  svg.setAttribute("data-cur", nk); svg.classList.toggle("has-sel", !!nk);
+  svg.querySelectorAll(".on,.pick").forEach(e => e.classList.remove("on", "pick"));
+  if (!nk) return;
+  if (svg.dataset.kind === "pie") { svg.querySelectorAll('[data-g="' + nk + '"]').forEach(e => e.classList.add("on")); return; }
+  const isPt = nk.includes(":"), ser = isPt ? nk.split(":")[0] : nk;
+  svg.querySelectorAll('[data-sg="' + ser + '"]').forEach(e => e.classList.add("on"));
+  if (isPt) svg.querySelectorAll('[data-g="' + nk + '"]').forEach(e => e.classList.add("pick"));
 }
 
 const mm = { loading: null, cache: new Map(), n: 0 };
@@ -807,7 +896,12 @@ const vwUp = e => {
   const had = vw.pts.has(e.pointerId); vw.pts.delete(e.pointerId);
   if (vw.pts.size) { vw.lastC = vwCenter(); vw.lastD = 0; return; }
   if (!had || e.type === "pointercancel") return;
-  if (vw.tapMoved < 8 && Date.now() - vw.tapT < 300) {            // ikki marta bosish: yaqinlashtirish / qaytarish
+  if (vw.tapMoved < 8 && Date.now() - vw.tapT < 300) {
+    const under = document.elementFromPoint(e.clientX, e.clientY), hit = under && under.closest && under.closest("[data-sel]");
+    if (hit && $("#vwStage").contains(hit)) { chartSelect(hit.closest("svg"), hit.dataset.sel); return; }
+    const sv = under && under.closest && under.closest("#vwStage svg");
+    if (sv && sv.getAttribute("data-cur")) { chartSelect(sv, sv.getAttribute("data-cur")); return; }
+    // ikki marta bosish: yaqinlashtirish / qaytarish
     const now = Date.now(), r = vwBody().getBoundingClientRect();
     if (now - vw.tapAt < 350) { vw.tapAt = 0; if (vw.s > vw.s0 * 1.3) vwFit(); else vwZoomAt(e.clientX - r.left, e.clientY - r.top, Math.max(vw.s0 * 3, 2)); }
     else vw.tapAt = now;
@@ -1061,6 +1155,8 @@ function autosize() { const t = $("#input"); t.style.height = "auto"; t.style.he
 
 /* ---------- hodisalar ---------- */
 $("#msgs").addEventListener("click", async ev => {
+  const hit = ev.target.closest("[data-sel]");
+  if (hit) { chartSelect(hit.closest("svg"), hit.dataset.sel); return; }
   const go = ev.target.closest("[data-go]");
   if (go) { openSettings(); return; }
   const b = ev.target.closest("[data-act]"); if (!b) return;
@@ -1152,7 +1248,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.9";
+const BUILD = "2026-11-05.11";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
