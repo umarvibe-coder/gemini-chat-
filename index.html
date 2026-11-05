@@ -5,7 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#2447c6">
-<title>Gemini Chat</title>
+<title>My AI Agent</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="My AI Agent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -150,16 +156,22 @@ details.prev .old { white-space: pre-wrap; border-left: 3px solid var(--line); p
 footer.composer { flex: none; padding-bottom: env(safe-area-inset-bottom, 0px);
   background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
 footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
-.row { display: flex; align-items: flex-end; gap: 8px; }
-#input { flex: 1; min-width: 0; resize: none; max-height: 160px; padding: 12px 15px; border-radius: 20px;
-  border: 1px solid var(--line); background: var(--surface); line-height: 1.45; box-shadow: var(--shadow); }
-.send { width: 48px; height: 48px; flex: none; border: 0; border-radius: 50%; display: grid; place-items: center; color: var(--on-accent);
-  background: linear-gradient(180deg, var(--btn1), var(--btn2)); box-shadow: 0 4px 12px rgba(36, 71, 198, .3); }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 26px; padding: 8px; box-shadow: var(--shadow); transition: border-color .15s; }
+.box:focus-within { border-color: var(--accent); }
+#input { display: block; width: 100%; resize: none; max-height: 180px; padding: 8px 10px 4px; border: 0; background: transparent; line-height: 1.5; font-size: 16px; }
+#input:focus-visible { outline: none; }
+#input::placeholder { color: var(--muted); }
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; }
+.chip { min-width: 0; max-width: calc(100% - 60px); border: 1px solid var(--line); background: var(--bg); border-radius: 99px; padding: 7px 10px 7px 11px;
+  font: 700 13px var(--sans); color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.chip:hover { background: var(--accent-soft); color: var(--ink); }
+.chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip .ic { width: 15px; height: 15px; }
+.chip .ic:first-child { color: var(--accent); }
+.send { width: 42px; height: 42px; flex: none; border: 0; border-radius: 50%; display: grid; place-items: center; color: var(--on-accent);
+  background: linear-gradient(180deg, var(--btn1), var(--btn2)); box-shadow: 0 3px 10px rgba(36, 71, 198, .3); }
 .send:disabled { opacity: .5; }
-.send .ic { width: 22px; height: 22px; }
-.chip { margin-top: 6px; border: 0; background: none; padding: 5px 4px; font: 700 12px var(--sans); color: var(--muted);
-  display: inline-flex; align-items: center; gap: 6px; border-radius: 10px; }
-.chip .ic { width: 15px; height: 15px; color: var(--accent); }
+.send .ic { width: 20px; height: 20px; }
 
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 104px);
   max-width: min(92vw, 520px); background: var(--ink); color: var(--bg); padding: 11px 15px; border-radius: 14px;
@@ -228,11 +240,13 @@ footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
 <main id="msgs"><div class="wrap" id="msgsInner"></div></main>
 
 <footer class="composer"><div class="wrap">
-  <div class="row">
+  <div class="box">
     <textarea id="input" rows="1" placeholder="Gemini'ga yozing…" aria-label="Xabar"></textarea>
-    <button class="send" id="send" data-ic="send" aria-label="Yuborish" title="Yuborish"></button>
+    <div class="bar">
+      <button class="chip" id="modelChip" data-ic="sparkle" aria-label="Modelni tanlash"><span id="modelName">tanlanmagan</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button class="send" id="send" data-ic="send" aria-label="Yuborish" title="Yuborish"></button>
+    </div>
   </div>
-  <button class="chip" id="modelChip" data-ic="sparkle" aria-label="Modelni tanlash"><span id="modelName">tanlanmagan</span></button>
 </div></footer>
 
 <div class="toast" id="toast" hidden></div>
@@ -261,6 +275,7 @@ footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
   <label for="s-branch">BRANCH</label>
   <input id="s-branch" autocomplete="off" autocapitalize="off" spellcheck="false">
 
+  <p class="help" id="ver"></p>
   <div class="actions"><button class="btn" id="btnSave" data-ic="check">Saqlash</button><button class="btn alt" id="btnClose">Yopish</button></div>
 </section>
 
@@ -459,7 +474,7 @@ const TOOLS = [{ functionDeclarations: [{
     content: { type: "STRING", description: "Faylning to'liq matni" }
   }, required: ["filename", "format", "content"] }
 }] }];
-const SYS = "Siz foydalanuvchining shaxsiy chatidagi yordamchisiz. Foydalanuvchi fayl (Markdown, matn, CSV jadval) so'rasa, create_file asbobini chaqiring va fayl matnini chatda takrorlamang: chatga faqat 1-2 jumla yozing. Oddiy savollarga odatdagidek qisqa va aniq javob bering. Foydalanuvchi qaysi tilda yozsa, shu tilda javob bering.";
+const SYS = "Siz foydalanuvchining shaxsiy chatidagi yordamchisiz. MUHIM: foydalanuvchi fayl, hujjat, jadval yoki CSV/Markdown/matn fayli so'rasa, javobni create_file asbobini chaqirib bering. Fayl matnini hech qachon chatga kod bloki yoki oddiy matn qilib yozmang va 'havola orqali yuklab oling' demang: chatga faqat 1-2 jumla yozing, fayl alohida kartochkada chiqadi. Oddiy savollarga odatdagidek qisqa va aniq javob bering. Foydalanuvchi qaysi tilda yozsa, shu tilda javob bering.";
 const cleanName = (n, fmt) => {
   let x = String(n || "fayl").replace(/[\\\/:*?"<>|\x00-\x1f]/g, "_").trim().slice(0, 80) || "fayl";
   if (!x.toLowerCase().endsWith("." + fmt)) x = x.replace(/\.(md|txt|csv)$/i, "") + "." + fmt;
@@ -796,7 +811,9 @@ function startRename() {
 }
 
 /* sozlamalar */
+const BUILD = "2026-11-05.3";
 function openSettings() {
+  $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
   $("#s-branch").value = cfg.branch;
   $("#s-modelBtn").innerHTML = ic("sparkle") + "<span>" + esc(cfg.model || "Tanlanmagan. Bosib tanlang") + "</span>";
@@ -916,6 +933,8 @@ async function tick() {
 }
 setInterval(tick, 6000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
 /* ---------- boshlash ---------- */
 render(); autosize();
