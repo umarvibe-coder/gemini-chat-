@@ -312,6 +312,8 @@ footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
 .plist .m2 { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 5px; align-items: center; }
 .plist .note { padding: 12px 8px; color: var(--muted); font-size: 14px; }
 .st { font: 600 12px var(--sans); } .st.ok { color: var(--claude); } .st.bad { color: var(--danger); }
+.tex[data-d="1"] { display: block; overflow-x: auto; padding: 4px 0; }
+.tex:not([data-done]) { font-family: var(--codefont); font-size: .92em; }
 </style>
 </head>
 <body>
@@ -505,9 +507,35 @@ if (window.DOMPurify) {
   });
 }
 const deSandbox = t => String(t).replace(/\[([^\]]*)\]\((?:sandbox|file|computer):[^)]*\)/g, "$1");
+/* LaTeX formulalar: markdown dan oldin ajratib olinadi, KaTeX yuklangach chiroyli chiziladi */
+function stashMath(t, box) {
+  const put = (tex, disp) => { box.push([tex, disp]); return "TEXPH" + (box.length - 1) + "X"; };
+  return t.split(/(```[\s\S]*?```|`[^`\n]*`)/).map((seg, i) => i % 2 ? seg : seg
+    .replace(/\$\$([\s\S]+?)\$\$/g, (m, a) => put(a.trim(), 1))
+    .replace(/\\\[([\s\S]+?)\\\]/g, (m, a) => put(a.trim(), 1))
+    .replace(/\\\(([\s\S]+?)\\\)/g, (m, a) => put(a.trim(), 0))
+    .replace(/(^|[^\\$\w])\$(?!\s)([^$\n]+?)(?<!\s)\$(?![\d$])/g, (m, pre, a) => pre + put(a, 0))).join("");
+}
+let katexP = null;
+function loadKatex() {
+  if (window.katex) return Promise.resolve();
+  if (!katexP) katexP = new Promise((ok, no) => {
+    const l = document.createElement("link"); l.rel = "stylesheet"; l.href = "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"; document.head.appendChild(l);
+    const sc = document.createElement("script"); sc.src = "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"; sc.onload = ok; sc.onerror = () => { katexP = null; no(new Error("katex")); }; document.head.appendChild(sc);
+  });
+  return katexP;
+}
+function typesetMath() {
+  const els = [...document.querySelectorAll(".tex:not([data-done])")]; if (!els.length) return;
+  loadKatex().then(() => els.forEach(el => { try { katex.render(el.dataset.t, el, { displayMode: el.dataset.d === "1", throwOnError: false, trust: false }); } catch (e) {} el.dataset.done = "1"; })).catch(() => {});
+}
 function md(t) {
   try {
-    if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(t, { gfm: true, breaks: true }));
+    if (window.marked && window.DOMPurify) {
+      const box = []; let h = DOMPurify.sanitize(marked.parse(stashMath(t, box), { gfm: true, breaks: true }));
+      if (box.length) h = h.replace(/TEXPH(\d+)X/g, (m, i) => { const b = box[+i]; return b ? '<span class="tex" data-d="' + b[1] + '" data-t="' + esc(b[0]) + '">' + esc(b[0]) + "</span>" : m; });
+      return h;
+    }
   } catch (e) {}
   return "<p>" + esc(t).replace(/\n/g, "<br>") + "</p>";
 }
@@ -647,6 +675,10 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
    - Hamma rasm bir xil uslubda, bir xil rang va o'lchamda bo'lsin; har rasmda FAQAT shu bosqich lahzasi ko'rinsin. Rasm ichida yozuv, raqam va belgi (1, 2, 3) yozmang: faqat shakllar va strelka; raqam va matnni sahifa o'zi qo'yadi. Bosqich sarlavhasiga ham raqam yozmang.
    - Tilsiz, o'zgarmas ob'ektlarni (masalan, taxta va go'sht, qo'l va pichoq) har rasmda bir joyda chizing, faqat harakat o'zgarsin. Strelka bilan harakat yo'nalishini ko'rsating.
    - Jarayon sxemasi (qaror, tarmoq) uchun show_diagram, bosqichma-bosqich jismoniy harakat uchun show_steps.
+8) calc (hisob-kitob): ifoda qiymati, tenglama yechish, hosila, integral.
+   - Murakkab hisob, tenglama ildizi, hosila yoki integral kerak bo'lsa o'zingiz hisoblamang: calc ni chaqiring. Natija sizga qaytadi, keyin shuni qadamma-qadam tushuntiring. Natijani o'zgartirmang.
+   - Natijada "xato" bo'lsa, buni foydalanuvchiga ayting va hisobni o'zingiz bajarganingizni belgilang (tekshirilmagan deb).
+   - Formulalarni LaTeX bilan yozish mumkin: $x^2$ (qator ichida) yoki $$...$$ (alohida qatorda). Sahifa ularni chiroyli ko'rsatadi. Kod bloki (python) yozmang, foydalanuvchiga hisob kodi kerak emas.
 Asbob chaqirgandan keyin chatga qisqa izoh yozing: nima ko'rsatildi va eng muhim xulosa nima (2-4 jumla). Izohsiz qoldirmang.
 
 VIZUAL JAVOB (muhim)
@@ -745,6 +777,65 @@ TOOLS[0].functionDeclarations.push({
       svg: { type: "STRING", description: "Shu bosqich rasmi: <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 400\">...</svg>. Yozuv, script, <style>, tashqi havola yozmang. Hamma bosqichda bir xil uslub va ranglar. Strelka bilan yo'nalishni ko'rsating." } }, required: ["title", "text", "svg"] } }
   }, required: ["title", "steps"] }
 });
+TOOLS[0].functionDeclarations.push({
+  name: "calc",
+  description: "Aniq matematik hisob-kitob: ifodani hisoblash, tenglama yechish, hosila va integral. Murakkab yoki ishonchsiz arifmetika, tenglama ildizlari, hosila va integral kerak bo'lganda chaqiring: natijani sahifa hisoblaydi va sizga qaytaradi, keyin uni tushuntirib yozing. O'zingiz hisoblab taxmin qilmang.",
+  parameters: { type: "OBJECT", properties: {
+    op: { type: "STRING", enum: ["evaluate", "solve", "derivative", "integral"], description: "evaluate = ifoda qiymati (x bo'lsa at bilan), solve = tenglama yechish (x bo'yicha), derivative = hosila, integral = integral (from va to bo'lsa aniq integral)" },
+    expr: { type: "STRING", description: "Ifoda yoki tenglama, o'zgaruvchi x. Masalan: x^2-4*x+3=0 yoki sin(x)*x. Amallar + - * / ^ ( ), funksiyalar sin cos tan sqrt abs ln log exp, konstantalar pi e." },
+    at: { type: "NUMBER", description: "ixtiyoriy: x ning qiymati (evaluate va derivative uchun)" },
+    from: { type: "NUMBER", description: "ixtiyoriy: aniq integralning quyi chegarasi" },
+    to: { type: "NUMBER", description: "ixtiyoriy: aniq integralning yuqori chegarasi" }
+  }, required: ["op", "expr"] }
+});
+const libP = {};
+function loadLib(key, src, test) {
+  if (test()) return Promise.resolve();
+  if (!libP[key]) libP[key] = new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = src; sc.onload = () => (test() ? ok() : no(new Error(key))); sc.onerror = () => { delete libP[key]; no(new Error(key + " yuklanmadi")); }; document.head.appendChild(sc); });
+  return libP[key];
+}
+const R12 = n => (Number.isFinite(n) ? Math.round(n * 1e10) / 1e10 : n);
+async function runCalc(a) {
+  try {
+    const op = a && a.op, expr = String((a && a.expr) || "").slice(0, 200);
+    if (op === "evaluate") {
+      const f = compileExpr(expr); if (!f) return JSON.stringify({ xato: "Ifodani o'qib bo'lmadi" });
+      const v = f(Number.isFinite(+a.at) && a.at != null ? +a.at : 0); return JSON.stringify({ natija: R12(v) });
+    }
+    if (op === "solve") {
+      const [l, r] = expr.includes("=") ? expr.split("=") : [expr, "0"], f = compileExpr("(" + l + ")-(" + r + ")"); if (!f) return JSON.stringify({ xato: "Tenglamani o'qib bo'lmadi" });
+      const c = f(0), A = (f(1) + f(-1)) / 2 - c, B = (f(1) - f(-1)) / 2, tol = 1e-9 * (1 + Math.abs(c));
+      const quad = Math.abs(f(2) - (4 * A + 2 * B + c)) < tol * 10 && Math.abs(f(-3) - (9 * A - 3 * B + c)) < tol * 10;
+      if (quad && Math.abs(A) > 1e-12) { const D = B * B - 4 * A * c, out = { turi: "kvadrat tenglama", a: R12(A), b: R12(B), c: R12(c), diskriminant: R12(D), choqqi: [R12(-B / (2 * A)), R12(f(-B / (2 * A)))] };
+        out.ildizlar = D > 0 ? [R12((-B - Math.sqrt(D)) / (2 * A)), R12((-B + Math.sqrt(D)) / (2 * A))] : D === 0 ? [R12(-B / (2 * A))] : []; if (D < 0) out.izoh = "haqiqiy ildiz yo'q"; return JSON.stringify(out); }
+      if (quad && Math.abs(B) > 1e-12) return JSON.stringify({ turi: "chiziqli tenglama", ildizlar: [R12(-c / B)] });
+      const roots = [], N = 4000, lo = -50, hi = 50; let px = lo, py = f(lo);
+      for (let i = 1; i <= N; i++) { const x = lo + (hi - lo) * i / N, y = f(x);
+        if (Number.isFinite(py) && Number.isFinite(y) && py * y <= 0 && !(py === 0 && y === 0)) { let a0 = px, b0 = x; for (let k = 0; k < 70; k++) { const m = (a0 + b0) / 2; if (f(a0) * f(m) <= 0) b0 = m; else a0 = m; } const rt = R12((a0 + b0) / 2); if (Math.abs(f(rt)) < 1e-6 && !roots.some(q => Math.abs(q - rt) < 1e-6)) roots.push(rt); }
+        px = x; py = y; }
+      return JSON.stringify({ turi: "son bilan yechim (-50 dan 50 gacha)", ildizlar: roots.sort((u, v) => Math.abs(u) - Math.abs(v)).slice(0, 12).sort((u, v) => u - v), izoh: roots.length ? "taxminiy" : "bu oraliqda ildiz topilmadi" });
+    }
+    if (op === "integral" && Number.isFinite(+a.from) && Number.isFinite(+a.to) && a.from != null && a.to != null) {
+      const f = compileExpr(expr); if (!f) return JSON.stringify({ xato: "Ifodani o'qib bo'lmadi" });
+      const lo = +a.from, hi = +a.to, N = 2000, h = (hi - lo) / N; let sum = f(lo) + f(hi);
+      for (let i = 1; i < N; i++) sum += f(lo + i * h) * (i % 2 ? 4 : 2); const v = sum * h / 3;
+      return JSON.stringify(Number.isFinite(v) ? { aniq_integral: R12(v), izoh: "son bilan (Simpson), taxminiy aniqlik yuqori" } : { xato: "Integral hisoblanmadi (funksiya oraliqda aniqlanmagan)" });
+    }
+    if (op === "derivative") {
+      try { await loadLib("math", "https://cdn.jsdelivr.net/npm/mathjs@12.4.2/lib/browser/math.min.js", () => window.math && math.derivative);
+        const d = math.derivative(expr, "x"); const out = { hosila: d.toString(), soddalashtirilgan: math.simplify(d).toString() };
+        if (a.at != null && Number.isFinite(+a.at)) out["x=" + a.at + " da"] = R12(d.evaluate({ x: +a.at })); return JSON.stringify(out); }
+      catch (e) { if (a.at != null && Number.isFinite(+a.at)) { const f = compileExpr(expr); if (f) { const x = +a.at, h = 1e-5; return JSON.stringify({ [("x=" + x + " da hosila")]: R12((f(x + h) - f(x - h)) / (2 * h)), izoh: "son bilan; ifodali hosila uchun kutubxona yuklanmadi" }); } }
+        return JSON.stringify({ xato: "Ifodali hosila hozir hisoblanmadi (kutubxona yuklanmadi). x ning qiymatini bering yoki o'zingiz yeching va buni aytib qo'ying" }); }
+    }
+    if (op === "integral") {
+      try { await loadLib("nerdamer", "https://cdn.jsdelivr.net/npm/nerdamer@1.1.13/all.min.js", () => window.nerdamer && nerdamer.integrate);
+        return JSON.stringify({ integral: nerdamer("integrate(" + expr + ", x)").toString(), izoh: "+ C doimiy" }); }
+      catch (e) { return JSON.stringify({ xato: "Aniqmas integral hozir hisoblanmadi (kutubxona yuklanmadi yoki ifoda murakkab). Chegara berib aniq integral so'rang" }); }
+    }
+    return JSON.stringify({ xato: "Noma'lum amal" });
+  } catch (e) { return JSON.stringify({ xato: String(e.message || e).slice(0, 120) }); }
+}
 /* y = f(x) ifodasini xavfsiz hisoblaydi: faqat ruxsat etilgan belgilar (token) o'tadi, eval ishlatilmaydi */
 const FN_OK = { sin: "Math.sin", cos: "Math.cos", tan: "Math.tan", asin: "Math.asin", acos: "Math.acos", atan: "Math.atan", sqrt: "Math.sqrt", abs: "Math.abs", ln: "Math.log", log: "Math.log10", exp: "Math.exp" };
 function compileExpr(src) {
@@ -1402,8 +1493,20 @@ async function gemini(chat, upto) {
   }
   if (!r.ok) throw new Error("Gemini " + r.status + ": " + ((j.error && j.error.message) || "xato"));
   const c = j.candidates && j.candidates[0];
-  const parts = (c && c.content && c.content.parts) || [];
+  let parts = (c && c.content && c.content.parts) || [];
   let text = parts.map(p => p.text || "").join("");
+  let cparts = parts;
+  for (let round = 0; round < 2 && useTools && cparts.some(p => p.functionCall && p.functionCall.name === "calc"); round++) {
+    const resp = [];
+    for (const p of cparts) if (p.functionCall) resp.push({ functionResponse: { name: p.functionCall.name, response: { result: p.functionCall.name === "calc" ? await runCalc(p.functionCall.args) : "Foydalanuvchiga ko'rsatildi" } } });
+    let r3, j3;
+    try { r3 = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(cfg.model) + ":generateContent", { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.gkey },
+      body: JSON.stringify({ contents: contents.concat([{ role: "model", parts: cparts }, { role: "user", parts: resp }]), tools: TOOLS, systemInstruction: { parts: [{ text: sysPrompt() }] } }) }); j3 = await r3.json().catch(() => ({})); } catch (e) { break; }
+    if (!r3.ok) break;
+    cparts = (((j3.candidates || [])[0] || {}).content || {}).parts || [];
+    parts = parts.concat(cparts);
+    const t2 = cparts.map(p => p.text || "").join(""); if (t2) text += (text ? "\n\n" : "") + t2;
+  }
   const files = parts.filter(p => p.functionCall && p.functionCall.name === "create_file" && p.functionCall.args && typeof p.functionCall.args.content === "string")
     .map(p => { const a = p.functionCall.args; const fm = FILE_FORMATS.includes(a.format) ? a.format : "txt"; return { name: cleanName(a.filename, fm), format: fm, content: a.content }; });
   const visuals = parseVisuals(parts);
@@ -1637,8 +1740,8 @@ function renderDrawer() {
   }).join("") : '<li style="padding:12px;color:var(--muted)">Hali chat yo\'q</li>';
 }
 function render() {
-  if (state.editing) { renderHeader(); renderDrawer(); return renderMsgs(); }
-  renderHeader(); renderMsgs(); renderDrawer();
+  if (state.editing) { renderHeader(); renderDrawer(); renderMsgs(); typesetMath(); return; }
+  renderHeader(); renderMsgs(); renderDrawer(); typesetMath();
 }
 function scrollEnd() { const m = $("#msgs"); requestAnimationFrame(() => { m.scrollTop = m.scrollHeight; }); }
 function autosize() { const t = $("#input"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }
@@ -1745,7 +1848,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.21";
+const BUILD = "2026-11-05.22";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
