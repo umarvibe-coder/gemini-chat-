@@ -656,6 +656,7 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
 3) show_diagram (Mermaid): jarayon, tuzilma, ketma-ketlik, reja uchun.
    - Asosan flowchart TD yoki LR ishlating. Tugun identifikatorlari oddiy lotin harf/raqam (A, B, C1).
    - Tugun matni doim qo'shtirnoq ichida: A["Matn"]. Matn ichida qo'shtirnoq, qavs va ikki nuqta ishlatmang.
+   - mindmap da tugun matni oddiy bo'lsin: qo'shtirnoq, qavs va ikki nuqta ishlatmang (faqat root((Mavzu)) bundan mustasno).
    - 15 tadan ortiq tugun qilmang. Faqat kod yozing, \`\`\` belgilarisiz.
 4) show_svg (rasm): shakl va joylashuvi muhim mavzularda: anatomiya (miya, yurak), qurilma tuzilishi, xarita, hujayra, o'quv rasm.
    - svg maydoniga FAQAT rasmning o'zini yozing: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400"> bilan boshlansin. Sarlavha, raqam va izoh yozmang: ularni sahifa o'zi chizadi.
@@ -1194,19 +1195,34 @@ function loadMermaid() {
     s.onload = res; s.onerror = () => { mm.loading = null; rej(new Error("Mermaid yuklanmadi")); }; document.head.appendChild(s);
   }));
 }
+/* Gemini'ning odatiy Mermaid xatolari: mindmap tugunlarida qo'shtirnoq va qavs; shularni olib tashlab qayta urinadi */
+function fixMermaid(code) {
+  const L = String(code).split("\n");
+  if (!/^\s*mindmap/.test(L[0] || "")) return code;
+  return L.map((ln, i) => { if (i < 2 || !ln.trim() || /\(\(/.test(ln) && i < 3) return ln;
+    const ind = ln.match(/^\s*/)[0]; return ind + ln.trim().replace(/["`]/g, "").replace(/[()\[\]{}]/g, " ").replace(/\s+/g, " ").trim(); }).join("\n");
+}
 async function hydrateDiagrams() {
   const chat = curChat(); if (!chat) return;
   const els = [...document.querySelectorAll(".mmd[data-mid]")].filter(e => !e.dataset.done);
   if (!els.length) return;
   const dark = isDark();
-  try { await loadMermaid(); mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: dark ? "dark" : "default", fontFamily: "Nunito, system-ui, sans-serif" }); }
+  try { await loadMermaid(); mermaid.initialize({ startOnLoad: false, securityLevel: "strict", suppressErrorRendering: true, theme: dark ? "dark" : "default", fontFamily: "Nunito, system-ui, sans-serif" }); }
   catch (e) { els.forEach(el => { el.innerHTML = '<div class="verr">Diagramma kutubxonasi yuklanmadi (internet?)</div>'; }); return; }
   for (const el of els) {
     const m = chat.messages.find(x => x.id === el.dataset.mid), v = m && m.visuals && m.visuals[+el.dataset.vi];
     if (!v) continue;
     const key = (dark ? "d|" : "l|") + v.code; let svg = mm.cache.get(key);
-    try { if (!svg) { svg = (await mermaid.render("mm" + (++mm.n), v.code)).svg; mm.cache.set(key, svg); } el.innerHTML = svg; }
-    catch (e) { const bad = document.getElementById("dmm" + mm.n); if (bad) bad.remove(); el.innerHTML = '<div class="verr">Diagrammani chizib bo\'lmadi. Manba kodini tekshiring.</div>'; }
+    const clean = () => document.querySelectorAll('[id^="dmm"], body > svg[aria-roledescription="error"]').forEach(n => n.remove());
+    try {
+      if (!svg) {
+        try { svg = (await mermaid.render("mm" + (++mm.n), v.code)).svg; }
+        catch (e1) { clean(); const fx = fixMermaid(v.code); if (fx === v.code) throw e1; svg = (await mermaid.render("mm" + (++mm.n), fx)).svg; }
+        mm.cache.set(key, svg);
+      }
+      el.innerHTML = svg; clean();
+    }
+    catch (e) { clean(); el.innerHTML = '<div class="verr">Diagrammani chizib bo\'lmadi. Manba kodini tekshiring.</div>'; }
     el.dataset.done = "1";
   }
 }
@@ -1848,7 +1864,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.22";
+const BUILD = "2026-11-05.23";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
