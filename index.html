@@ -1625,6 +1625,7 @@ async function gemini(chat, upto) {
       else text += (text ? "\n\n" : "") + "(\"" + q + "\" bo'yicha mos ochiq litsenziyali rasm topilmadi.)";
     } catch (e) { text += (text ? "\n\n" : "") + "(Rasm qidirib bo'lmadi: " + (e.message || e) + ")"; }
   }
+  if (visuals.length) text = text.replace(/^[ \t]*\{\s*"(?:expr|title|labels|series|query|op|steps)"[^\n]*\}[ \t]*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();   // model asbob argumentini matnga yozib qo'ysa
   if (!visuals.some(v => v.kind === "diagram")) {   // ba'zi modellar asbob o'rniga ```mermaid blok yozadi: uni diagramma kartochkasiga aylantiramiz
     const mm0 = /```mermaid\s*\n([\s\S]*?)```/i.exec(text);
     if (mm0 && mm0[1].trim()) {
@@ -1987,7 +1988,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.27";
+const BUILD = "2026-11-05.28";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
