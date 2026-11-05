@@ -490,7 +490,7 @@ const TOOLS = [{ functionDeclarations: [{
     content: { type: "STRING", description: "Faylning to'liq matni" }
   }, required: ["filename", "format", "content"] }
 }] }];
-const SYS = "Siz foydalanuvchining shaxsiy chatidagi yordamchisiz. MUHIM: foydalanuvchi fayl, hujjat, jadval yoki CSV/Markdown/matn fayli so'rasa, javobni create_file asbobini chaqirib bering. Fayl matnini hech qachon chatga kod bloki yoki oddiy matn qilib yozmang va 'havola orqali yuklab oling' demang: chatga faqat 1-2 jumla yozing, fayl alohida kartochkada chiqadi. Raqamli ma'lumot, taqqoslash yoki statistika uchun show_chart, jarayon, sxema yoki tuzilma uchun show_diagram (Mermaid) asboblarini chaqiring va ma'lumotni uzun matn yoki jadval qilib takrorlamang. Oddiy savollarga odatdagidek qisqa va aniq javob bering. Foydalanuvchi qaysi tilda yozsa, shu tilda javob bering.";
+const SYS = "Siz foydalanuvchining shaxsiy chatidagi yordamchisiz. MUHIM: foydalanuvchi fayl, hujjat, jadval yoki CSV/Markdown/matn fayli so'rasa, javobni create_file asbobini chaqirib bering. Fayl matnini hech qachon chatga kod bloki yoki oddiy matn qilib yozmang va 'havola orqali yuklab oling' demang: chatga faqat 1-2 jumla yozing, fayl alohida kartochkada chiqadi. Raqamli ma'lumot, taqqoslash yoki statistika uchun show_chart, jarayon, sxema yoki tuzilma uchun show_diagram (Mermaid) asboblarini chaqiring va ma'lumotni uzun matn yoki jadval qilib takrorlamang. Har so'rovga faqat kerakli asbobni chaqiring: grafik yoki sxema so'ralganda kod yozuvchi fayl (masalan .py) yaratmang, fayl faqat foydalanuvchi aynan fayl so'raganda kerak. Oddiy savollarga odatdagidek qisqa va aniq javob bering. Foydalanuvchi qaysi tilda yozsa, shu tilda javob bering.";
 const cleanName = (n, fmt) => {
   let x = String(n || "fayl").replace(/[\\\/:*?"<>|\x00-\x1f]/g, "_").trim().slice(0, 80) || "fayl";
   if (!x.toLowerCase().endsWith("." + fmt)) x = x.replace(/\.(md|txt|csv)$/i, "") + "." + fmt;
@@ -989,7 +989,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.4";
+const BUILD = "2026-11-05.5";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
