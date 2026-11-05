@@ -259,6 +259,11 @@ footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
 .send:disabled { opacity: .5; }
 .send .ic { width: 20px; height: 20px; }
 
+.cmdbar { display: flex; gap: 6px; overflow-x: auto; padding: 8px 8px 0; scrollbar-width: none; }
+.cmdbar::-webkit-scrollbar { display: none; }
+.cmdbar button { flex: none; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 99px; padding: 6px 11px; font-size: 14px; white-space: nowrap; }
+.cmdbar button b { color: var(--accent); font-weight: 600; margin-right: 5px; }
+.cmdbar button:hover { background: var(--accent-soft); }
 .genimg { display: block; width: 100%; height: auto; border-radius: 12px; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 104px);
   max-width: min(92vw, 520px); background: var(--ink); color: var(--bg); padding: 11px 15px; border-radius: 14px;
@@ -336,6 +341,7 @@ footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
 
 <footer class="composer"><div class="wrap">
   <div class="box">
+    <div class="cmdbar" id="cmdbar" hidden></div>
     <textarea id="input" rows="1" placeholder="Gemini'ga yozing…" aria-label="Xabar"></textarea>
     <div class="bar">
       <button class="chip" id="modelChip" data-ic="sparkle" aria-label="Modelni tanlash"><span id="modelName">tanlanmagan</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
@@ -699,7 +705,8 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
 9) draw_image (yangi rasm yaratish)
    - "Rasm yarat", "rasm chiz", "foto", "realistik", "illyustratsiya", "tasavvur qil" kabi so'rovlarda (olma, manzara, hayvon, mahsulot, plakat): draw_image. show_svg ni faqat tuzilma sxemasi (qismlari belgilanadigan chizma), show_steps ni jarayon bosqichlari, show_chart ni raqamlar uchun ishlating.
    - draw_image dan keyin izoh 2-3 jumla bo'lsin: rasmda nima ko'rsatilgani. Uzun maqola yozmang.
-   - prompt inglizcha, aniq: nima, qanday uslubda, qanday yorug'likda. Rasmga yozuv qo'shishni so'ramang. Bir javobda bittadan ortiq chaqirmang.
+   - prompt inglizcha, 30-70 so'z, tartib: ob'ekt va tafsilotlar, fon, uslub, kadr, yorug'lik, ranglar, sifat (masalan: "a ripe red apple with water droplets on a rustic wooden table, blurred kitchen background, realistic macro photo, close-up, soft morning window light, warm tones, highly detailed, sharp focus"). Rasmga yozuv qo'shishni so'ramang. Foydalanuvchi so'zi qisqa bo'lsa ham tavsifni o'zingiz boyiting. Bir javobda bittadan ortiq chaqirmang.
+   - Foydalanuvchi xabari /asbob_nomi bilan boshlansa (masalan /draw_image), "[Foydalanuvchi aynan ... asbobini ishlatishni so'radi]" belgisi qo'shiladi: aynan shu asbobni chaqiring.
    - Rasm yaratilmasa (xato qaytsa), buni foydalanuvchiga rostgo'ylik bilan ayting va SVG bilan o'zingiz chizishni taklif qiling.
 Tarixda \u27e6...\u27e7 ichidagi yozuvlar faqat sahifaning eslatmasi (oldin qanday vizual ko'rsatilgani). Ularni HECH QACHON o'zingiz yozmang: grafik, rasm yoki diagramma kerak bo'lsa, tegishli asbobni chaqiring, matnga belgi yozish vizual chiqarmaydi.
 Asbob chaqirgandan keyin chatga qisqa izoh yozing: nima ko'rsatildi va eng muhim xulosa nima (2-4 jumla). Izohsiz qoldirmang.
@@ -784,7 +791,7 @@ TOOLS[0].functionDeclarations.push({
   description: "Sun'iy intellekt orqali YANGI rasm yaratadi (illyustratsiya, rasm, portret bo'lmagan manzara, mahsulot, ikona, plakat). Foydalanuvchi 'rasm chiz', 'rasm yarat', 'tasavvur qilishga yordam ber' desa yoki sxema emas, realistik/badiiy rasm kerak bo'lganda chaqiring. Sxema, grafik, diagramma uchun BU asbob emas. Bir javobda faqat bitta rasm. Haqiqiy shaxslar (mashhur odamlar) rasmini so'ramang.",
   parameters: { type: "OBJECT", properties: {
     title: { type: "STRING", description: "Foydalanuvchi ko'radigan sarlavha, o'zbekcha, qisqa" },
-    prompt: { type: "STRING", description: "Rasm tavsifi, INGLIZ tilida, 1-3 jumla: asosiy ob'ekt, uslub (masalan: watercolor, flat vector, realistic photo), yorug'lik, kompozitsiya. Rasm ichiga yozuv qo'shmang." },
+    prompt: { type: "STRING", description: "Rasm tavsifi, INGLIZ tilida, 30-70 so'z, vergul bilan ajratilgan: 1) asosiy ob'ekt va uning aniq tafsilotlari, 2) muhit/fon, 3) uslub (realistic photo, watercolor, flat vector, 3D render, oil painting), 4) kadr va kompozitsiya (close-up, wide shot, top view), 5) yorug'lik (soft morning light, golden hour, studio light), 6) ranglar, 7) sifat so'zlari (highly detailed, sharp focus). Rasm ichiga yozuv qo'shmang." },
     size: { type: "STRING", description: "square, landscape yoki portrait (default square)" }
   }, required: ["title", "prompt"] }
 });
@@ -1636,17 +1643,43 @@ function buildContents(chat, upto) {
   const msgs = chat.messages.slice(0, upto + 1);
   let last = -1; msgs.forEach((m, i) => { if ((m.files && m.files.length) || (m.visuals && m.visuals.length)) last = i; });
   return msgs.map((m, i) => {
-    let t = m.text || "";
+    let t = m.role === "user" ? cmdText(m.text || "") : (m.text || "");
     (m.visuals || []).forEach(v => { t += "\n\u27e6sahifa ko'rsatgan vizual: " + (v.kind === "chart" ? "Grafik" : v.kind === "svg" ? "Rasm (SVG)" : v.kind === "photo" ? "Internetdan rasm" : v.kind === "steps" ? "Bosqichli rasmlar" : v.kind === "graph" ? "Funksiya grafigi" : v.kind === "image" ? "AI yaratgan rasm" : "Diagramma") + " \u2014 " + v.title + "\u27e7" + (i === last ? "\n" + (v.kind === "chart" ? JSON.stringify({ type: v.type, labels: v.labels, series: v.series }) : v.kind === "steps" ? JSON.stringify(v.steps.map(x => ({ title: x.title, text: x.text }))) : v.kind === "graph" ? JSON.stringify({ funksiyalar: v.exprs, xmin: v.xmin, xmax: v.xmax }) : v.kind === "image" ? "prompt: " + v.prompt : v.code) : ""); });
     (m.files || []).forEach(f => { t += "\n\u27e6sahifa yaratgan fayl: " + f.name + ", " + f.content.length + " belgi\u27e7" + (i === last ? "\n```\n" + f.content + "\n```" : ""); });
     return { role: m.role === "user" ? "user" : "model", parts: [{ text: t }] };
   }).filter(c => c.parts[0].text.trim());
 }
+/* ---------- /buyruqlar: foydalanuvchi asbobni aniq tanlaydi (xuddi skill chaqirgandek) ---------- */
+const CMDS = [
+  { n: "draw_image", a: ["rasm", "draw"], h: "AI rasm yaratish" },
+  { n: "show_svg", a: ["svg", "chizma"], h: "SVG chizma" },
+  { n: "show_diagram", a: ["diagramma", "sxema"], h: "Diagramma" },
+  { n: "show_chart", a: ["chart", "grafik"], h: "Ustun/chiziq/doira grafik" },
+  { n: "plot_function", a: ["funksiya", "plot"], h: "Funksiya grafigi" },
+  { n: "show_steps", a: ["bosqich", "steps"], h: "Bosqichli rasmlar" },
+  { n: "find_image", a: ["foto", "find"], h: "Internetdan rasm" },
+  { n: "calc", a: ["hisob", "calc"], h: "Hisob-kitob" },
+  { n: "create_file", a: ["fayl", "file"], h: "Fayl yaratish" }
+];
+function parseCmd(text) {
+  const m = /^\/([a-zA-Z_]+)(?:\s+([\s\S]*))?$/.exec(String(text || "").trim()); if (!m) return null;
+  const k = m[1].toLowerCase(), c = CMDS.find(x => x.n === k || x.a.includes(k)); if (!c) return null;
+  return { tool: c.n, rest: (m[2] || "").trim() };
+}
+function cmdText(text) { const c = parseCmd(text); return c ? "[Foydalanuvchi aynan " + c.tool + " asbobini ishlatishni so'radi]\n" + (c.rest || "(tavsif berilmagan: mavzuni suhbat kontekstidan oling)") : text; }
+function cmdBar() {
+  const v = $("#input").value, bar = $("#cmdbar"), m = /^\/([a-zA-Z_]*)$/.exec(v);
+  if (!m) { bar.hidden = true; return; }
+  const q = m[1].toLowerCase(), list = CMDS.filter(c => !q || c.n.includes(q) || c.a.some(a => a.startsWith(q)));
+  bar.innerHTML = list.map(c => '<button type="button" data-cmd="' + c.n + '"><b>/' + c.n + "</b>" + esc(c.h) + "</button>").join(""); bar.hidden = !list.length;
+}
 async function gemini(chat, upto) {
   const contents = buildContents(chat, upto);
+  const fc = parseCmd(chat.messages[upto] && chat.messages[upto].role === "user" ? chat.messages[upto].text : "");
   let useTools = true, r, j;
   for (let attempt = 0; attempt < 4; attempt++) {
     const body = useTools ? { contents, tools: TOOLS, systemInstruction: { parts: [{ text: sysPrompt() }] } } : { contents };
+    if (useTools && fc) body.toolConfig = { functionCallingConfig: { mode: "ANY", allowedFunctionNames: [fc.tool] } };
     try {
       r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(cfg.model) + ":generateContent", {
         method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.gkey }, body: JSON.stringify(body)
@@ -1799,7 +1832,7 @@ async function send() {
       c.messages.push({ id: mid, role: "user", by: "me", text, ts: Date.now(), pending: true });
       if (!c.title || c.title === "Yangi chat") c.title = text.replace(/\s+/g, " ").slice(0, 40);
     });
-    ta.value = ""; autosize(); render(); scrollEnd();
+    ta.value = ""; autosize(); cmdBar(); render(); scrollEnd();
     await answerOne(id, mid);
   });
 }
@@ -2030,7 +2063,8 @@ $("#msgs").addEventListener("click", async ev => {
   msgs.addEventListener("wheel", ev => { const body = ev.target.closest(".gbody"); if (!body) return; ev.preventDefault(); const c = ctx(body); if (!c || !c.svg) return; const g = geo(c.V, c.svg, ev.clientX, ev.clientY); gZoom(c.V, g.x, g.y, ev.deltaY > 0 ? 1.15 : 1 / 1.15); redraw(c); }, { passive: false });
 }
 $("#send").addEventListener("click", send);
-$("#input").addEventListener("input", autosize);
+$("#input").addEventListener("input", () => { autosize(); cmdBar(); });
+$("#cmdbar").addEventListener("click", e => { const b = e.target.closest("[data-cmd]"); if (!b) return; const ta = $("#input"); ta.value = "/" + b.dataset.cmd + " "; $("#cmdbar").hidden = true; autosize(); ta.focus(); });
 $("#input").addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
 $("#btnSync").addEventListener("click", syncNow);
 $("#btnSettings").addEventListener("click", openSettings);
@@ -2070,7 +2104,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.30";
+const BUILD = "2026-11-05.31";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-oakey").value = cfg.oakey; $("#s-oamodel").value = cfg.oamodel; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
