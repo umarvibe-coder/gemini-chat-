@@ -385,6 +385,9 @@ footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
   <input id="s-oamodel" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="gpt-image-1-mini">
   <p class="help">Gemini kaliti bilan aralashtirmang: bu alohida kalit (platform.openai.com). Bo'sh qoldirsangiz, rasm bepul servis orqali sinab ko'riladi (sifati va ishlashi kafolatlanmagan).</p>
 
+  <label class="chkrow" style="display:flex;gap:10px;align-items:center;text-transform:none;letter-spacing:0;font-size:14px"><input type="checkbox" id="s-critique" style="width:20px;height:20px"> Chizgan SVG rasmni o'zi tekshirib tuzatsin</label>
+  <p class="help">Gemini rasmni chizgach, uni ko'radi va xato bo'lsa qayta chizadi. Har rasmga 1 ta qo'shimcha so'rov ketadi.</p>
+
   <label for="s-gh">GITHUB TOKEN</label>
   <input id="s-gh" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
   <p class="help"><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Fine-grained token</a>: Repository access = faqat chatlar repo'si, Permissions → Contents = Read and write.</p>
@@ -500,7 +503,8 @@ const cfg = {
   ghtoken: LS.get("ghtoken") || "",
   repo: LS.get("repo") || "umarvibe-coder/gemini-chat-data",
   branch: LS.get("branch") || "main",
-  model: LS.get("model") || ""
+  model: LS.get("model") || "",
+  critique: LS.get("critique") !== "0"
 };
 const state = {
   chats: new Map(),            // id -> {chat, sha}
@@ -703,6 +707,7 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
    - Rasmni bir nechta shakldan yig'ing (path, ellipse, circle, rect, polygon): har qism o'z rangida (yumshoq, och ranglar), qora kontur (stroke="#2b2540" stroke-width="3"), qismlar bir-biriga taqalib tursin va butun rasm viewBox ichiga sig'sin. Muhim joylarda ichki chiziqlar va tafsilot qo'shing, bitta tomchi yoki oddiy blob chizmang.
    - parts maydoniga har qism uchun {x, y, name, text} bering: x va y qismning aynan ichidagi nuqta (viewBox koordinatasida, kontur chizig'ida emas), name 1-3 so'z, text bitta qisqa jumla (70 belgigacha). 3-7 ta qism yetarli. Sahifa shu nuqtaga raqam qo'yadi va izohni pastda chiqaradi.
    - Aniq bilmagan tafsilotni chizmang va parts ga yozmang. Matnda & o'rniga &amp; yozing.
+   - O'yin aktivi, multfilm, buyum (eshik, bino, qurol, fon) so'ralsa, TEKIS MULTFILM USLUBI: qalin to'q kontur (stroke-width 6-8, stroke-linejoin="round"), 5-6 rangli palitra, katta shaklda ikki ton (linearGradient yoki ikkinchi, siljitilgan shakl), yorug' tomonda och highlight, qatlam tartibi: katta shakl, tafsilot, yorug'lik. Kvadrat buyum 800x800, keng fon 1600x900 (o'rtasi bo'sh, bezak chetlarda). Orqa fon chizmang (shaffof qolsin). Simmetrik narsani bir tomonidan chizib, ikkinchisini transform bilan ko'zgulang. Oddiy to'g'ri to'rtburchaklar o'rniga path va yumaloq burchaklar ishlating. Tayyor ikonka bor narsa (olma, kalit, uy) uchun draw_icon.
 5) find_image (internetdan rasm): real narsaning ko'rinishi kerak bo'lganda: hayvon, o'simlik, bino, joy, mashina, haqiqiy anatomik yoki ilmiy rasm.
    - query ni INGLIZ tilida, 2-6 so'z qilib yozing (masalan: human heart anatomy diagram). Anatomiya va tuzilish uchun oxiriga "diagram" qo'shing.
    - Qidiruv so'zi juda qisqa va oddiy bo'lsin: asosiy ot va 1-2 so'z (camel, camel desert). "realistic", "photo", "high quality" kabi so'zlarni qo'shmang.
@@ -719,6 +724,7 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
    - Jarayonning HAMMA muhim harakatini qamrab oling: bosqichlarni o'tkazib yubormang (masalan, galstukda ikkinchi o'rash ham bor). Harakat qaysi qismga nisbatan bo'lishini strelka va rang bilan aniq ko'rsating.
    - Tilsiz, o'zgarmas ob'ektlarni (masalan, taxta va go'sht, qo'l va pichoq) har rasmda bir joyda chizing, faqat harakat o'zgarsin. Strelka bilan harakat yo'nalishini ko'rsating.
    - Jarayon sxemasi (qaror, tarmoq) uchun show_diagram, bosqichma-bosqich jismoniy harakat uchun show_steps.
+   - FAZOVIY (3D) jarayonlarni SVG bilan to'g'ri ko'rsatib bo'lmaydi: galstuk bog'lash, tugun, buklash, origami, kiyinish, qo'l harakati. Ularda show_steps O'RNIGA find_image chaqiring (query inglizcha, masalan: four-in-hand tie knot diagram) va bosqichlarni matnda qisqa yozing. show_steps faqat tekis va oddiy harakatlar uchun (kesish, quyish, aralashtirish, chizish).
 8) calc (hisob-kitob): ifoda qiymati, tenglama yechish, hosila, integral.
    - Murakkab hisob, tenglama ildizi, hosila yoki integral kerak bo'lsa o'zingiz hisoblamang: calc ni chaqiring. Natija sizga qaytadi, keyin shuni qadamma-qadam tushuntiring. Natijani o'zgartirmang.
    - Natijada "xato" bo'lsa, buni foydalanuvchiga ayting va hisobni o'zingiz bajarganingizni belgilang (tekshirilmagan deb).
@@ -732,6 +738,9 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
    - Foydalanuvchi rasm, PDF yoki matn fayl biriktirishi mumkin: ularni o'zingiz o'qib, mazmuniga qarab javob bering.
    - Foydalanuvchi xabari /asbob_nomi bilan boshlansa (masalan /draw_image), "[Foydalanuvchi aynan ... asbobini ishlatishni so'radi]" belgisi qo'shiladi: aynan shu asbobni chaqiring.
    - Rasm yaratilmasa (xato qaytsa), buni foydalanuvchiga rostgo'ylik bilan ayting va SVG bilan o'zingiz chizishni taklif qiling.
+10) draw_icon (tayyor ikonkalar): 189 ta tayyor, bir xil uslubdagi multfilm rasm (olma, kalit, uy, narvon, bolg'a, sovg'a, qayiq, raketa, tulki, daraxt, qo'ng'iroq, ayiqcha, do'ppi, samsa, dutar va boshqalar).
+   - Foydalanuvchi oddiy, tanish narsani (bitta yoki bir nechta) so'rasa va u ro'yxatda bo'lsa, shuni tanlang: tez, bepul, har doim aniq. name ro'yxatdan, color hex rang (har ikonkaga mos, yorqin), label ixtiyoriy (1-2 so'z).
+   - Ro'yxatda yo'q narsa uchun show_svg yoki draw_image. Ikonkalarni o'zingiz chizishga urinmang.
 Tarixda \u27e6...\u27e7 ichidagi yozuvlar faqat sahifaning eslatmasi (oldin qanday vizual ko'rsatilgani). Ularni HECH QACHON o'zingiz yozmang: grafik, rasm yoki diagramma kerak bo'lsa, tegishli asbobni chaqiring, matnga belgi yozish vizual chiqarmaydi.
 Asbob chaqirgandan keyin chatga qisqa izoh yozing: nima ko'rsatildi va eng muhim xulosa nima (2-4 jumla). Izohsiz qoldirmang.
 
@@ -818,6 +827,20 @@ TOOLS[0].functionDeclarations.push({
     prompt: { type: "STRING", description: "Rasm tavsifi, INGLIZ tilida, 30-70 so'z, vergul bilan ajratilgan: 1) asosiy ob'ekt va uning aniq tafsilotlari, 2) muhit/fon, 3) uslub (realistic photo, watercolor, flat vector, 3D render, oil painting), 4) kadr va kompozitsiya (close-up, wide shot, top view), 5) yorug'lik (soft morning light, golden hour, studio light), 6) ranglar, 7) sifat so'zlari (highly detailed, sharp focus). Rasm ichiga yozuv qo'shmang." },
     size: { type: "STRING", description: "square, landscape yoki portrait (default square)" }
   }, required: ["title", "prompt"] }
+});
+const ICO_NAMES = ["apple", "pear", "pomegranate", "fish", "cat", "teapot", "piala", "non", "key", "umbrella", "car", "mushroom", "banana", "grapes", "cherry", "strawberry", "carrot", "watermelon", "onion", "lemon", "corn", "peach", "melon", "tomato", "dog", "rabbit", "hen", "duck", "horse", "cow", "sheep", "bird", "turtle", "snail", "butterfly", "bee", "spoon", "fork", "mug", "bottle", "glasses", "scissors", "pencil", "book", "clock", "lamp", "bell", "broom", "ball", "kite", "balloon", "boat", "airplane", "bicycle", "house", "tree", "flower", "sun", "star", "leaf", "doppi", "cotton", "pomegranate_half", "samsa", "kettle", "dutar", "carpet", "lagan", "hat", "sneaker", "sock", "chair", "table", "bed", "frying_pan", "pot", "bucket", "toothbrush", "comb", "iron", "tv", "telephone", "watering_can", "backpack", "ruler", "eraser", "crayon", "paintbrush", "globe", "notebook", "hammer", "saw", "screwdriver", "wrench", "ladder", "tshirt", "dress", "trousers", "jacket", "scarf", "mitten", "cap", "boot", "sandal", "skirt", "bow_tie", "glove", "bus", "truck", "train", "tractor", "helicopter", "rocket", "ship", "scooter", "fire_truck", "ambulance", "tram", "hot_air_balloon", "whale", "dolphin", "octopus", "crab", "starfish", "seashell", "seahorse", "ladybug", "ant", "dragonfly", "caterpillar", "spider", "lion", "elephant", "giraffe", "bear", "monkey", "fox", "camel", "owl", "frog", "hedgehog", "squirrel", "penguin", "tandoor", "doira", "karnay", "beshik", "ewer", "chopon", "jug", "apricot", "walnut", "almond", "bread", "cake", "ice_cream", "candy", "lollipop", "egg", "cheese", "cookie", "pizza", "cupcake", "honey", "sandwich", "cloud", "rain_cloud", "snowflake", "rainbow", "lightning", "mountains", "cactus", "tulip", "acorn", "fir_tree", "palm", "teddy_bear", "doll", "drum", "guitar", "trumpet", "robot", "blocks", "spinning_top", "xylophone", "puzzle", "gift", "whistle", "moon"];
+const ICO_COL = ["#e8b84a", "#d9534f", "#3b82c4", "#3aa860", "#e0457b", "#7c5cd6", "#e8833a", "#a0674b"];
+TOOLS[0].functionDeclarations.push({
+  name: "draw_icon",
+  description: "Tayyor, bir xil multfilm uslubidagi ikonkalardan rasm yig'adi (189 ta: olma, kalit, uy, narvon, bolg'a, sovg'a, qayiq, raketa, tulki, daraxt, qo'ng'iroq, ayiqcha, do'ppi, samsa va boshqalar). Oddiy, tanish narsa so'ralganda va u ro'yxatda bo'lsa chaqiring: tez, bepul va aniq. Ro'yxatda yo'q narsa uchun show_svg yoki draw_image.",
+  parameters: { type: "OBJECT", properties: {
+    title: { type: "STRING", description: "Foydalanuvchi ko'radigan sarlavha, o'zbekcha, qisqa" },
+    items: { type: "ARRAY", description: "1-8 ta ikonka", items: { type: "OBJECT", properties: {
+      name: { type: "STRING", enum: ICO_NAMES, description: "Ikonka nomi" },
+      color: { type: "STRING", description: "Asosiy rang, hex (masalan #e8b84a). Narsaga mos, yorqin rang tanlang" },
+      label: { type: "STRING", description: "Ixtiyoriy yozuv, 1-2 so'z" } }, required: ["name"] } },
+    bg: { type: "STRING", description: "Ixtiyoriy fon rangi hex. Bo'sh qoldirsangiz och fon" }
+  }, required: ["title", "items"] }
 });
 TOOLS[0].functionDeclarations.push({
   name: "plot_function",
@@ -1020,7 +1043,7 @@ const stepIdx = new Map();
 const stepKey = (mid, vi) => mid + ":" + vi;
 const curStep = (m, vi, v) => Math.max(0, Math.min((v.steps || []).length - 1, stepIdx.get(stepKey(m.id, vi)) || 0));
 /* Gemini yozgan SVG ni xavfsiz qiladi: skript, tashqi havola va hodisalar olib tashlanadi, id lar prefiks oladi, orqa fon qo'shiladi */
-function cleanSvg(code, uid) {
+function cleanSvg(code, uid, noBg) {
   try {
     code = String(code || "").replace(/^```(?:svg|xml)?\s*|```\s*$/g, "").trim();
     if (!code || code.length > 80000) return null;
@@ -1051,7 +1074,7 @@ function cleanSvg(code, uid) {
     if (!root.getAttribute("font-family")) root.setAttribute("font-family", "Nunito, system-ui, Arial, sans-serif");
     const bg = doc.createElementNS("http://www.w3.org/2000/svg", "rect");
     bg.setAttribute("x", vb[0]); bg.setAttribute("y", vb[1]); bg.setAttribute("width", vb[2]); bg.setAttribute("height", vb[3]); bg.setAttribute("fill", "#fbf8f3");
-    root.insertBefore(bg, root.firstChild);
+    if (!noBg) root.insertBefore(bg, root.firstChild);
     return new XMLSerializer().serializeToString(root);
   } catch (e) { return null; }
 }
@@ -1078,9 +1101,9 @@ function partsSvg(title, inner, g, ps, at) {
     '<text x="400" y="38" text-anchor="middle" font-size="22" font-weight="800" fill="#2b2540">' + xe(String(title).slice(0, 60)) + "</text>" + inner + marks + out + "</svg>";
 }
 const goodPts = a => (Array.isArray(a) ? a : []).filter(p => p && Number.isFinite(+p.x) && Number.isFinite(+p.y)).slice(0, 8);
-function svgOf(v, uid) {
-  const pic = cleanSvg(v.code, uid); if (!pic) return null;
+function svgOf(v, uid, noBg) {
   const ps = goodPts(v.parts);
+  const pic = cleanSvg(v.code, uid, noBg && !ps.length); if (!pic) return null;
   if (!ps.length) return pic;
   const vbm = /viewBox="([^"]+)"/.exec(pic.slice(0, 600)); const vb = vbm ? vbm[1].split(/\s+/).map(Number) : [0, 0, 800, 400];
   const sc = Math.min(760 / vb[2], 400 / vb[3]), pw = vb[2] * sc, ph = vb[3] * sc, px = (800 - pw) / 2, py = 62;
@@ -1196,6 +1219,10 @@ function parseVisuals(parts) {
       { const vis = { kind: "svg", title: String(a.title || "Rasm").slice(0, 120), code: a.svg.replace(/^```(?:svg|xml)?\s*|```\s*$/g, "").trim() };
         if (Array.isArray(a.parts)) { const ps = a.parts.slice(0, 8).filter(p => p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))).map(p => ({ x: Number(p.x), y: Number(p.y), name: String(p.name || "").slice(0, 40), text: String(p.text || "").slice(0, 120) })); if (ps.length) vis.parts = ps; }
         out.push(vis); }
+    if (fc.name === "draw_icon" && Array.isArray(a.items)) {
+      const items = a.items.slice(0, 8).filter(x => x && ICO_NAMES.includes(x.name)).map(x => ({ name: x.name, color: /^#[0-9a-f]{6}$/i.test(String(x.color || "")) ? String(x.color) : "", label: String(x.label || "").slice(0, 24) }));
+      if (items.length) out.push({ kind: "icons", title: String(a.title || "Ikonkalar").slice(0, 120), items, bg: /^#[0-9a-f]{6}$/i.test(String(a.bg || "")) ? String(a.bg) : "" });
+    }
     if (fc.name === "plot_function" && a.expr) {
       const exs = [a.expr, a.expr2, a.expr3].filter(e => e && String(e).trim()).map(e => String(e).replace(/^\s*y\s*=\s*/i, "").slice(0, 120));
       if (exs.length && exs.every(e => gFn(e))) { let x0 = Number(a.xmin), x1 = Number(a.xmax); if (!Number.isFinite(x0) || !Number.isFinite(x1) || x0 === x1) { x0 = -6; x1 = 6; } if (x0 > x1) [x0, x1] = [x1, x0];
@@ -1404,6 +1431,51 @@ async function hydrateDiagrams() {
     el.dataset.done = "1";
   }
 }
+/* ---------- tayyor ikonkalar (icons.json: 189 ta vektor rasm, 0-100 koordinata) ---------- */
+const ICO = { data: null, p: null, want: false };
+function loadIcons() {
+  if (ICO.data) return Promise.resolve(ICO.data);
+  if (!ICO.p) ICO.p = fetch("icons.json?v=" + BUILD).then(r => { if (!r.ok) throw new Error("icons.json " + r.status); return r.json(); })
+    .then(j => { ICO.data = j; if (ICO.want) { ICO.want = false; render(); } return j; }).catch(e => { ICO.p = null; throw e; });
+  return ICO.p;
+}
+function iconsSvg(v, o) {
+  o = o || {}; const D = ICO.data; if (!D) return null;
+  const its = (v.items || []).filter(x => D[x.name]); if (!its.length) return null;
+  const n = its.length, cols = n <= 3 ? n : n === 4 ? 2 : n <= 6 ? 3 : 4, rows = Math.ceil(n / cols), cell = n === 1 ? 360 : 240, lab = its.some(x => x.label) ? 34 : 0, pad = 16;
+  const W = cols * cell + pad * 2, H = rows * (cell + lab) + pad * 2, bg = o.transparent ? "" : (v.bg || "#fbf8f3");
+  let s = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + " " + H + '" font-family="Nunito, system-ui, Arial, sans-serif">' + (bg ? '<rect width="' + W + '" height="' + H + '" fill="' + bg + '"/>' : "");
+  its.forEach((x, i) => {
+    const ic = D[x.name], cs = ic.d.split("Z").map(t => t.trim()).filter(Boolean).map(t => t + " Z"), fill = (ic.o || []).map(k => cs[k]).filter(Boolean).join(" ");
+    const col = x.color || ICO_COL[i % ICO_COL.length], r = Math.floor(i / cols), inRow = Math.min(cols, n - r * cols);
+    const cx = pad + ((i % cols) + (cols - inRow) / 2) * cell, cy = pad + r * (cell + lab), sc = (cell - 24) / 100;
+    s += '<g transform="translate(' + (cx + 12).toFixed(1) + "," + (cy + 12) + ") scale(" + sc.toFixed(3) + ')"><path d="' + fill + '" fill="' + col + '"/><path d="' + ic.d + '" fill="#222" fill-rule="evenodd"/></g>';
+    if (x.label) s += '<text x="' + (cx + cell / 2).toFixed(1) + '" y="' + (cy + cell + 20) + '" text-anchor="middle" font-size="22" font-weight="800" fill="#2b2540">' + xe(x.label) + "</text>";
+  });
+  return s + "</svg>";
+}
+function svgToCanvas(svg, W, fill) {
+  return new Promise((res, rej) => {
+    if (!/xmlns=/.test(svg.slice(0, 200))) svg = svg.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+    const doc = new DOMParser().parseFromString(svg, "image/svg+xml"), root = doc.documentElement;
+    if (!root || doc.querySelector("parsererror")) { rej(new Error("SVG xato")); return; }
+    const vb = (root.getAttribute("viewBox") || "0 0 800 600").trim().split(/[\s,]+/).map(Number);
+    const w = Math.round(W), h = Math.round(W * vb[3] / vb[2]); root.setAttribute("width", w); root.setAttribute("height", h);
+    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(root)], { type: "image/svg+xml" })), img = new Image();
+    img.onload = () => { const c = document.createElement("canvas"); c.width = w; c.height = h; const g = c.getContext("2d"); if (fill) { g.fillStyle = fill; g.fillRect(0, 0, w, h); } g.drawImage(img, 0, 0, w, h); URL.revokeObjectURL(url); res(c); };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("SVG chizib bo'lmadi")); };
+    img.src = url;
+  });
+}
+async function svgToPng(svg, title) {
+  try {
+    const vb = /viewBox="([^"]+)"/.exec(svg.slice(0, 800)), v = vb ? vb[1].trim().split(/[\s,]+/).map(Number) : [0, 0, 800, 600];
+    const c = await svgToCanvas(svg, Math.min(2400, Math.max(1000, Math.round(v[2] * (v[2] < 1000 ? 2 : 1))))), blob = await new Promise(r => c.toBlob(r, "image/png"));
+    if (!blob) throw new Error("PNG yasab bo'lmadi");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = (String(title || "rasm").replace(/[^\wЀ-ӿa-zA-Z0-9]+/g, "_").slice(0, 40) || "rasm") + ".png";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast("PNG yuklab olindi (shaffof fon)");
+  } catch (e) { toast("PNG: " + (e.message || e), "err"); }
+}
 function visualHtml(m) {
   if (!m.visuals || !m.visuals.length) return "";
   return '<div class="visuals">' + m.visuals.map((v, i) => {
@@ -1422,15 +1494,17 @@ function visualHtml(m) {
     else if (v.kind === "steps") { const k = curStep(m, i, v), n = v.steps.length, sv = stepSvg(v, k, "c" + m.id.slice(0, 6) + i);
       inner = '<div class="vbody" data-act="vopen">' + (sv || '<div class="verr">Rasmni chizib bo\'lmadi.</div>') + "</div>" +
         '<div class="pact stp"><button class="pbtn" data-act="sprev"' + (k === 0 ? " disabled" : "") + ">‹ Oldingi</button><span class=\"sdots\">" + v.steps.map((_, j) => '<i class="' + (j === k ? "on" : "") + '"></i>').join("") + '</span><button class="pbtn acc" data-act="snext"' + (k === n - 1 ? " disabled" : "") + ">Keyingi ›</button></div>"; }
+    else if (v.kind === "icons") { const sv = iconsSvg(v); if (!sv) { ICO.want = true; loadIcons().catch(() => {}); }
+      inner = '<div class="vbody" data-act="vopen">' + (sv || '<div class="verr">Ikonkalar yuklanmoqda…</div>') + "</div>"; }
     else if (v.kind === "svg") { const sv = svgOf(v, "c" + m.id.slice(0, 6) + i); inner = '<div class="vbody" data-act="vopen">' + (sv || '<div class="verr">Rasmni chizib bo\'lmadi. Manba kodini tekshiring.</div>') + "</div>"; }
     else { const c = mm.cache.get((isDark() ? "d|" : "l|") + v.code);
       inner = '<div class="vbody mmd" data-act="vopen" data-mid="' + esc(m.id) + '" data-vi="' + i + '"' + (c ? ' data-done="1"' : "") + ">" + (c || '<div class="verr">Diagramma chizilmoqda…</div>') + "</div>"; }
-    return '<div class="vis" data-vi="' + i + '"><div class="vhead"><span class="tile sm ' + (v.kind === "diagram" ? "k-audio" : "k-image") + '">' + ic(v.kind === "chart" || v.kind === "graph" ? "chart" : v.kind === "svg" || v.kind === "photo" || v.kind === "steps" || v.kind === "image" ? "image" : "diagram") + '</span><span class="t">' + esc(v.title) + "</span>" +
-      '<button class="ab" data-act="vopen" title="Katta ko\'rish" aria-label="Katta ko\'rish">' + ic("expand") + '</button>' + (v.kind === "image" ? '<button class="ab" data-act="vregen" title="Qayta yaratish" aria-label="Qayta yaratish">' + ic("redo") + "</button>" : "") + '<button class="ab" data-act="vdl" title="SVG sifatida yuklash" aria-label="SVG sifatida yuklash">' + ic("download") + "</button></div>" + inner +
-      "<details><summary>Manba</summary><pre>" + esc(v.kind === "chart" ? JSON.stringify({ type: v.type, expr: v.expr, labels: v.labels, series: v.series, unit: v.unit }, null, 1) : v.kind === "steps" ? JSON.stringify(v.steps, null, 1) : v.kind === "graph" ? JSON.stringify({ exprs: v.exprs, xmin: v.xmin, xmax: v.xmax }, null, 1) : v.kind === "image" ? JSON.stringify({ prompt: v.prompt, provider: v.provider, w: v.w, h: v.h }, null, 1) : v.kind === "photo" ? JSON.stringify({ query: v.query, chosen: v.chosen, items: v.items, parts: v.parts }, null, 1) : v.code + (v.parts ? "\n\n" + JSON.stringify(v.parts, null, 1) : "")) + "</pre></details></div>";
+    return '<div class="vis" data-vi="' + i + '"><div class="vhead"><span class="tile sm ' + (v.kind === "diagram" ? "k-audio" : "k-image") + '">' + ic(v.kind === "chart" || v.kind === "graph" ? "chart" : v.kind === "svg" || v.kind === "icons" || v.kind === "photo" || v.kind === "steps" || v.kind === "image" ? "image" : "diagram") + '</span><span class="t">' + esc(v.title) + "</span>" +
+      '<button class="ab" data-act="vopen" title="Katta ko\'rish" aria-label="Katta ko\'rish">' + ic("expand") + '</button>' + (v.kind === "image" ? '<button class="ab" data-act="vregen" title="Qayta yaratish" aria-label="Qayta yaratish">' + ic("redo") + "</button>" : "") + (["svg", "icons", "steps", "chart", "graph"].includes(v.kind) ? '<button class="ab txt" data-act="vpng" title="PNG sifatida yuklash (shaffof fon)" aria-label="PNG sifatida yuklash">PNG</button>' : "") + '<button class="ab" data-act="vdl" title="SVG sifatida yuklash" aria-label="SVG sifatida yuklash">' + ic("download") + "</button></div>" + inner +
+      "<details><summary>Manba</summary><pre>" + esc(v.kind === "chart" ? JSON.stringify({ type: v.type, expr: v.expr, labels: v.labels, series: v.series, unit: v.unit }, null, 1) : v.kind === "steps" ? JSON.stringify(v.steps, null, 1) : v.kind === "graph" ? JSON.stringify({ exprs: v.exprs, xmin: v.xmin, xmax: v.xmax }, null, 1) : v.kind === "icons" ? JSON.stringify({ items: v.items, bg: v.bg }, null, 1) : v.kind === "image" ? JSON.stringify({ prompt: v.prompt, provider: v.provider, w: v.w, h: v.h }, null, 1) : v.kind === "photo" ? JSON.stringify({ query: v.query, chosen: v.chosen, items: v.items, parts: v.parts }, null, 1) : v.code + (v.parts ? "\n\n" + JSON.stringify(v.parts, null, 1) : "")) + "</pre></details></div>";
   }).join("") + "</div>";
 }
-function downloadVisual(m, vi) {
+function downloadVisual(m, vi, png) {
   const v = m.visuals[vi]; let svg;
   if (v.kind === "chart") svg = chartSvg(v);
   else if (v.kind === "image") {
@@ -1443,8 +1517,10 @@ function downloadVisual(m, vi) {
   }
   else if (v.kind === "graph") svg = graphSvg(v, graphView(m, vi, v), "dl");
   else if (v.kind === "steps") { svg = stepSvg(v, curStep(m, vi, v), "dl"); if (!svg) { toast("Rasm kodi xato", "err"); return; } }
-  else if (v.kind === "svg") { svg = svgOf(v, "dl"); if (!svg) { toast("Rasm kodi xato", "err"); return; } }
+  else if (v.kind === "svg") { svg = svgOf(v, "dl", png); if (!svg) { toast("Rasm kodi xato", "err"); return; } }
+  else if (v.kind === "icons") { svg = iconsSvg(v, { transparent: true }); if (!svg) { toast("Ikonkalar hali yuklanmadi", "err"); return; } }
   else { const el = document.querySelector('.vis[data-vi="' + vi + '"] .mmd svg'); if (!el) { toast("Diagramma hali chizilmadi", "err"); return; } svg = new XMLSerializer().serializeToString(el); }
+  if (png) { svgToPng(svg, v.title); return; }
   saveSvg(svg, v.title, v.kind);
 }
 function saveSvg(svg, title, kind) {
@@ -1480,6 +1556,7 @@ function vwFit() {
 function vwSvgFor(v) {
   if (v.kind === "chart") return chartSvg(v);
   if (v.kind === "svg") return svgOf(v, "vw") || "";
+  if (v.kind === "icons") return iconsSvg(v) || "";
   if (v.kind === "steps") return stepSvg(v, curStep(vw.m, vw.i, v), "vw") || "";
   if (v.kind === "graph") return graphSvg(v, graphView(vw.m, vw.i, v), "vw");
   if (v.kind === "photo") return photoSvg(v) || "";
@@ -1675,7 +1752,7 @@ function buildContents(chat, upto) {
   let last = -1; msgs.forEach((m, i) => { if ((m.files && m.files.length) || (m.visuals && m.visuals.length)) last = i; });
   return msgs.map((m, i) => {
     let t = m.role === "user" ? cmdText(m.text || "") : (m.text || "");
-    (m.visuals || []).forEach(v => { t += "\n\u27e6sahifa ko'rsatgan vizual: " + (v.kind === "chart" ? "Grafik" : v.kind === "svg" ? "Rasm (SVG)" : v.kind === "photo" ? "Internetdan rasm" : v.kind === "steps" ? "Bosqichli rasmlar" : v.kind === "graph" ? "Funksiya grafigi" : v.kind === "image" ? "AI yaratgan rasm" : "Diagramma") + " \u2014 " + v.title + "\u27e7" + (i === last ? "\n" + (v.kind === "chart" ? JSON.stringify({ type: v.type, labels: v.labels, series: v.series }) : v.kind === "steps" ? JSON.stringify(v.steps.map(x => ({ title: x.title, text: x.text }))) : v.kind === "graph" ? JSON.stringify({ funksiyalar: v.exprs, xmin: v.xmin, xmax: v.xmax }) : v.kind === "image" ? "prompt: " + v.prompt : v.code) : ""); });
+    (m.visuals || []).forEach(v => { t += "\n\u27e6sahifa ko'rsatgan vizual: " + (v.kind === "chart" ? "Grafik" : v.kind === "svg" ? "Rasm (SVG)" : v.kind === "photo" ? "Internetdan rasm" : v.kind === "steps" ? "Bosqichli rasmlar" : v.kind === "graph" ? "Funksiya grafigi" : v.kind === "image" ? "AI yaratgan rasm" : v.kind === "icons" ? "Tayyor ikonkalar: " + v.items.map(x => x.name).join(", ") : "Diagramma") + " \u2014 " + v.title + "\u27e7" + (i === last ? "\n" + (v.kind === "chart" ? JSON.stringify({ type: v.type, labels: v.labels, series: v.series }) : v.kind === "steps" ? JSON.stringify(v.steps.map(x => ({ title: x.title, text: x.text }))) : v.kind === "graph" ? JSON.stringify({ funksiyalar: v.exprs, xmin: v.xmin, xmax: v.xmax }) : v.kind === "image" ? "prompt: " + v.prompt : v.code) : ""); });
     (m.files || []).forEach(f => { t += "\n\u27e6sahifa yaratgan fayl: " + f.name + ", " + f.content.length + " belgi\u27e7" + (i === last ? "\n```\n" + f.content + "\n```" : ""); });
     const parts = [];
     if (m.role === "user" && m.attachments && m.attachments.length) {
@@ -1744,9 +1821,33 @@ async function captionImage(src, prompt) {
   } catch (e) { return ""; }
 }
 
+const SVG_SAMPLE = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 800\"><defs><linearGradient id=\"st1\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#e2d3f7\"/><stop offset=\"1\" stop-color=\"#ad94da\"/></linearGradient><linearGradient id=\"st2\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#d3c0ef\"/><stop offset=\"1\" stop-color=\"#9d83ce\"/></linearGradient><linearGradient id=\"wd\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#ffd886\"/><stop offset=\"1\" stop-color=\"#ee9f3a\"/></linearGradient><linearGradient id=\"pl1\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\"><stop offset=\"0\" stop-color=\"#f7b53f\"/><stop offset=\".5\" stop-color=\"#ffd36b\"/><stop offset=\"1\" stop-color=\"#f4a53a\"/></linearGradient><linearGradient id=\"pl2\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\"><stop offset=\"0\" stop-color=\"#eb9530\"/><stop offset=\".5\" stop-color=\"#fbc255\"/><stop offset=\"1\" stop-color=\"#e68d2a\"/></linearGradient><radialGradient id=\"glow\" cx=\".5\" cy=\".3\" r=\".75\"><stop offset=\"0\" stop-color=\"#fff3c4\" stop-opacity=\".32\"/><stop offset=\"1\" stop-color=\"#fff3c4\" stop-opacity=\"0\"/></radialGradient><linearGradient id=\"sh\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#5a3200\" stop-opacity=\".28\"/><stop offset=\"1\" stop-color=\"#5a3200\" stop-opacity=\"0\"/></linearGradient><clipPath id=\"door\"><path d=\"M210 722 L210 350 A190 190 0 0 1 590 350 L590 722 Z\"/></clipPath></defs><ellipse cx=\"400\" cy=\"772\" rx=\"270\" ry=\"20\" fill=\"#000\" opacity=\".16\"/><path d=\"M210 722 L210 350 A190 190 0 0 1 590 350 L590 722 Z\" fill=\"url(#wd)\"/><g clip-path=\"url(#door)\"><rect x=\"210.0\" y=\"0\" width=\"63.3\" height=\"800\" fill=\"url(#pl1)\"/><rect x=\"273.3\" y=\"0\" width=\"63.3\" height=\"800\" fill=\"url(#pl2)\"/><line x1=\"273.3\" y1=\"120\" x2=\"273.3\" y2=\"722\" stroke=\"#a8641a\" stroke-width=\"4\" stroke-linecap=\"round\" opacity=\".7\"/><rect x=\"336.7\" y=\"0\" width=\"63.3\" height=\"800\" fill=\"url(#pl1)\"/><line x1=\"336.7\" y1=\"120\" x2=\"336.7\" y2=\"722\" stroke=\"#a8641a\" stroke-width=\"4\" stroke-linecap=\"round\" opacity=\".7\"/><rect x=\"400.0\" y=\"0\" width=\"63.3\" height=\"800\" fill=\"url(#pl2)\"/><line x1=\"400.0\" y1=\"120\" x2=\"400.0\" y2=\"722\" stroke=\"#a8641a\" stroke-width=\"4\" stroke-linecap=\"round\" opacity=\".7\"/><rect x=\"463.3\" y=\"0\" width=\"63.3\" height=\"800\" fill=\"url(#pl1)\"/><line x1=\"463.3\" y1=\"120\" x2=\"463.3\" y2=\"722\" stroke=\"#a8641a\" stroke-width=\"4\" stroke-linecap=\"round\" opacity=\".7\"/><rect x=\"526.7\" y=\"0\" width=\"63.3\" height=\"800\" fill=\"url(#pl2)\"/><line x1=\"526.7\" y1=\"120\" x2=\"526.7\" y2=\"722\" stroke=\"#a8641a\" stroke-width=\"4\" stroke-linecap=\"round\" opacity=\".7\"/><path d=\"M231.6 286.1 q4 30 0 60\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M228.6 273.3 q4 30 0 60\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M257.5 530.2 q4 39 0 78\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M294.4 437.8 q4 27 0 54\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M292.6 287.2 q4 25 0 51\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M321.2 540.1 q4 40 0 80\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M379.8 317.7 q4 28 0 55\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M373.2 506.2 q4 41 0 83\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M382.8 280.4 q4 35 0 70\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M438.2 427.1 q4 24 0 49\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M430.7 281.3 q4 43 0 87\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M445.6 441.7 q4 28 0 55\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M510.5 450.3 q4 42 0 84\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M508.2 427.9 q4 30 0 61\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M498.8 400.9 q4 24 0 48\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M550.9 534.4 q4 21 0 42\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M541.1 469.2 q4 27 0 54\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><path d=\"M559.6 414.9 q4 29 0 57\" stroke=\"#b97324\" stroke-width=\"3\" fill=\"none\" stroke-linecap=\"round\" opacity=\".45\"/><rect x=\"0\" y=\"0\" width=\"800\" height=\"800\" fill=\"url(#glow)\"/><path d=\"M210 722 L210 350 A190 190 0 0 1 590 350 L590 722 Z\" fill=\"url(#sh)\"/></g><path d=\"M210 722 L210 350 A190 190 0 0 1 590 350 L590 722 Z\" fill=\"none\" stroke=\"#8a4f12\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M214.0 347.8 L138.0 346.9 A262 262 0 0 1 152.7 263.4 L224.5 288.5 A186 186 0 0 0 214.0 347.8Z\" fill=\"url(#st1)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M152.2 339.6 Q154.0 319.3 155.8 306.9\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\" fill=\"none\"/><path d=\"M226.0 284.3 L154.9 257.4 A262 262 0 0 1 197.3 184.0 L256.1 232.2 A186 186 0 0 0 226.0 284.3Z\" fill=\"url(#st2)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M170.7 255.5 Q178.0 236.7 185.2 226.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\" fill=\"none\"/><path d=\"M259.0 228.7 L201.3 179.2 A262 262 0 0 1 266.3 124.7 L305.1 190.0 A186 186 0 0 0 259.0 228.7Z\" fill=\"url(#st1)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M216.9 182.8 Q228.7 167.4 240.6 160.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\" fill=\"none\"/><path d=\"M308.9 187.8 L271.7 121.5 A262 262 0 0 1 351.4 92.5 L365.5 167.2 A186 186 0 0 0 308.9 187.8Z\" fill=\"url(#st2)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M285.1 130.2 Q300.2 119.6 315.2 117.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\" fill=\"none\"/><path d=\"M369.9 166.5 L354.0 69.7 A284 284 0 0 1 446.0 69.7 L430.1 166.5 A186 186 0 0 0 369.9 166.5Z\" fill=\"url(#st1)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M364.3 82.4 Q382.2 77.2 400.0 80.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\" fill=\"none\"/><path d=\"M434.5 167.2 L448.6 92.5 A262 262 0 0 1 528.3 121.5 L491.1 187.8 A186 186 0 0 0 434.5 167.2Z\" fill=\"url(#st2)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M453.3 107.8 Q469.1 108.4 484.8 117.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\" fill=\"none\"/><path d=\"M494.9 190.0 L533.7 124.7 A262 262 0 0 1 598.7 179.2 L541.0 228.7 A186 186 0 0 0 494.9 190.0Z\" fill=\"url(#st1)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M532.9 140.6 Q546.2 146.3 559.4 160.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\" fill=\"none\"/><path d=\"M543.9 232.2 L602.7 184.0 A262 262 0 0 1 645.1 257.4 L574.0 284.3 A186 186 0 0 0 543.9 232.2Z\" fill=\"url(#st2)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M596.5 198.7 Q605.6 208.4 614.8 226.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\" fill=\"none\"/><path d=\"M575.5 288.5 L647.3 263.4 A262 262 0 0 1 662.0 346.9 L586.0 347.8 A186 186 0 0 0 575.5 288.5Z\" fill=\"url(#st1)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M636.4 275.0 Q640.3 287.0 644.2 306.9\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\" fill=\"none\"/><path d=\"M152.0 354.0 H200.0 Q214.0 354.0 214.0 368.0 V425.0 Q214.0 439.0 200.0 439.0 H152.0 Q138.0 439.0 138.0 425.0 V368.0 Q138.0 354.0 152.0 354.0Z\" fill=\"url(#st1)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M158.0 370.0 H188.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\"/><path d=\"M162.0 445.0 H210.0 Q224.0 445.0 224.0 459.0 V516.0 Q224.0 530.0 210.0 530.0 H162.0 Q148.0 530.0 148.0 516.0 V459.0 Q148.0 445.0 162.0 445.0Z\" fill=\"url(#st2)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M168.0 461.0 H198.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\"/><path d=\"M152.0 536.0 H200.0 Q214.0 536.0 214.0 550.0 V607.0 Q214.0 621.0 200.0 621.0 H152.0 Q138.0 621.0 138.0 607.0 V550.0 Q138.0 536.0 152.0 536.0Z\" fill=\"url(#st1)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M158.0 552.0 H188.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\"/><path d=\"M162.0 627.0 H210.0 Q224.0 627.0 224.0 641.0 V705.0 Q224.0 719.0 210.0 719.0 H162.0 Q148.0 719.0 148.0 705.0 V641.0 Q148.0 627.0 162.0 627.0Z\" fill=\"url(#st2)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M168.0 643.0 H198.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\"/><path d=\"M600.0 354.0 H648.0 Q662.0 354.0 662.0 368.0 V425.0 Q662.0 439.0 648.0 439.0 H600.0 Q586.0 439.0 586.0 425.0 V368.0 Q586.0 354.0 600.0 354.0Z\" fill=\"url(#st1)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M606.0 370.0 H636.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\"/><path d=\"M590.0 445.0 H638.0 Q652.0 445.0 652.0 459.0 V516.0 Q652.0 530.0 638.0 530.0 H590.0 Q576.0 530.0 576.0 516.0 V459.0 Q576.0 445.0 590.0 445.0Z\" fill=\"url(#st2)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M596.0 461.0 H626.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\"/><path d=\"M600.0 536.0 H648.0 Q662.0 536.0 662.0 550.0 V607.0 Q662.0 621.0 648.0 621.0 H600.0 Q586.0 621.0 586.0 607.0 V550.0 Q586.0 536.0 600.0 536.0Z\" fill=\"url(#st1)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M606.0 552.0 H636.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\"/><path d=\"M590.0 627.0 H638.0 Q652.0 627.0 652.0 641.0 V705.0 Q652.0 719.0 638.0 719.0 H590.0 Q576.0 719.0 576.0 705.0 V641.0 Q576.0 627.0 590.0 627.0Z\" fill=\"url(#st2)\" stroke=\"#4b3a63\" stroke-width=\"7\" stroke-linejoin=\"round\"/><path d=\"M596.0 643.0 H626.0\" stroke=\"#fff\" stroke-opacity=\".6\" stroke-width=\"6\" stroke-linecap=\"round\"/><g transform=\"translate(400 92)\" stroke=\"#8a5a14\" stroke-width=\"5\" stroke-linejoin=\"round\"><path d=\"M-34 14 L-40 -14 L-18 2 L0 -22 L18 2 L40 -14 L34 14 Z\" fill=\"#ffd45a\"/><rect x=\"-34\" y=\"14\" width=\"68\" height=\"9\" rx=\"3\" fill=\"#f0a830\"/></g><path d=\"M300 286 Q300 300 314 300 Q300 300 300 314 Q300 300 286 300 Q300 300 300 286Z\" fill=\"#fff3b0\" stroke=\"#d99a2b\" stroke-width=\"2\"/><path d=\"M505 459 Q505 470 516 470 Q505 470 505 481 Q505 470 494 470 Q505 470 505 459Z\" fill=\"#fff3b0\" stroke=\"#d99a2b\" stroke-width=\"2\"/><path d=\"M330 581 Q330 590 339 590 Q330 590 330 599 Q330 590 321 590 Q330 590 330 581Z\" fill=\"#fff3b0\" stroke=\"#d99a2b\" stroke-width=\"2\"/><path d=\"M470 222 Q470 230 478 230 Q470 230 470 238 Q470 230 462 230 Q470 230 470 222Z\" fill=\"#fff3b0\" stroke=\"#d99a2b\" stroke-width=\"2\"/><path d=\"M560 630 Q560 640 570 640 Q560 640 560 650 Q560 640 550 640 Q560 640 560 630Z\" fill=\"#fff3b0\" stroke=\"#d99a2b\" stroke-width=\"2\"/></svg>";
+function svgExtra(fc, text) {
+  if (!((fc && fc.tool === "show_svg") || /\b(svg|chizma|eshik|o'yin|oyin|aktiv|sprite|multfilm|flat)\b/i.test(String(text || "")))) return "";
+  return "\n\nSVG NAMUNASI. Sifat darajasi shu: tekis multfilm uslubi, qalin kontur, gradient, yorug'lik, simmetriya (eshik, 800x800, fonsiz). Shu usullardan foydalaning, lekin nusxa ko'chirmang va so'ralgan narsani o'zingiz chizing:\n" + SVG_SAMPLE;
+}
+/* SVG rasmni o'zi tekshirsin: rasm PNG qilinib Gemini'ga ko'rsatiladi, xato bo'lsa u tuzatilgan to'liq rasm qaytaradi */
+async function critiqueSvg(v, request) {
+  try {
+    const pic = cleanSvg(v.code, "cr"); if (!pic) return null;
+    const c = await svgToCanvas(pic, 800, "#ffffff"), b64 = c.toDataURL("image/jpeg", 0.85).split(",")[1];
+    const ac = new AbortController(); setTimeout(() => ac.abort(), 60000);
+    const tool = { functionDeclarations: TOOLS[0].functionDeclarations.filter(f => f.name === "show_svg") };
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(cfg.model) + ":generateContent", {
+      method: "POST", signal: ac.signal, headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.gkey },
+      body: JSON.stringify({ tools: [tool], contents: [{ role: "user", parts: [{ text: "Foydalanuvchi so'rovi: \"" + String(request || "").slice(0, 600) + "\"\n\nQuyida siz chizgan SVG rasm (PNG ko'rinishida). Uni diqqat bilan ko'ring: so'rovga mosmi, qismlar kesilgan, uzilgan, bir-birining ustiga tushgan, nisbati noto'g'ri yoki bo'sh/xunuk joyi bormi?\n- Jiddiy nuqson YO'Q bo'lsa, faqat bitta so'z yozing: OK.\n- Nuqson bo'lsa, show_svg ni chaqirib TO'LIQ tuzatilgan rasmni bering (xuddi shu uslub va viewBox, faqat nuqsonlarni tuzating).\n\nAvvalgi SVG kodi:\n" + v.code.slice(0, 14000) }, { inlineData: { mimeType: "image/jpeg", data: b64 } }] }] }) });
+    if (!r.ok) return null;
+    const j = await r.json(), ps = (j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [];
+    const fcp = ps.find(p => p.functionCall && p.functionCall.name === "show_svg" && p.functionCall.args && typeof p.functionCall.args.svg === "string");
+    if (!fcp) return null;
+    const code = fcp.functionCall.args.svg.replace(/^```(?:svg|xml)?\s*|```\s*$/g, "").trim();
+    return cleanSvg(code, "cr2") ? code : null;
+  } catch (e) { return null; }
+}
 /* ---------- /buyruqlar: foydalanuvchi asbobni aniq tanlaydi (xuddi skill chaqirgandek) ---------- */
 const CMDS = [
   { n: "draw_image", a: ["rasm", "draw"], h: "AI rasm yaratish" },
+  { n: "draw_icon", a: ["ikonka", "icon"], h: "Tayyor ikonkalar" },
   { n: "show_svg", a: ["svg", "chizma"], h: "SVG chizma" },
   { n: "show_diagram", a: ["diagramma", "sxema"], h: "Diagramma" },
   { n: "show_chart", a: ["chart", "grafik"], h: "Ustun/chiziq/doira grafik" },
@@ -1774,7 +1875,7 @@ async function gemini(chat, upto) {
   const fc = parseCmd(chat.messages[upto] && chat.messages[upto].role === "user" ? chat.messages[upto].text : "");
   let useTools = true, r, j;
   for (let attempt = 0; attempt < 4; attempt++) {
-    const body = useTools ? { contents, tools: TOOLS, systemInstruction: { parts: [{ text: sysPrompt() }] } } : { contents };
+    const body = useTools ? { contents, tools: TOOLS, systemInstruction: { parts: [{ text: sysPrompt() + svgExtra(fc, chat.messages[upto] && chat.messages[upto].text) }] } } : { contents };
     if (useTools && fc) body.toolConfig = { functionCallingConfig: { mode: "ANY", allowedFunctionNames: [fc.tool] } };
     try {
       r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(cfg.model) + ":generateContent", {
@@ -1804,7 +1905,7 @@ async function gemini(chat, upto) {
     const t2 = cparts.map(p => p.text || "").join(""); if (t2) text += (text ? "\n\n" : "") + t2;
   }
   /* model asbobni chaqirmay, matnga "[Grafik: ...]" deb yozib qo'ysa: bir marta asbobni chaqirishni talab qilamiz */
-  const PH = /(?:\[|\u27e6)\s*(?:sahifa[^:\u2014\]\u27e7]*[:\u2014]\s*)?(?:Grafik|Diagramma|Rasm|Bosqichli rasmlar|Funksiya grafigi|Internetdan rasm|Fayl yaratildi)[^\]\u27e7\n]*(?:\]|\u27e7)/gi;
+  const PH = /(?:\[|\u27e6)\s*(?:sahifa[^:\u2014\]\u27e7]*[:\u2014]\s*)?(?:Grafik|Diagramma|Rasm|Tayyor ikonkalar|Bosqichli rasmlar|Funksiya grafigi|Internetdan rasm|Fayl yaratildi)[^\]\u27e7\n]*(?:\]|\u27e7)/gi;
   if (useTools && !parts.some(p => p.functionCall) && PH.test(text)) {
     PH.lastIndex = 0;
     try {
@@ -1841,6 +1942,11 @@ async function gemini(chat, upto) {
         const cap = await captionImage(im.src, pr); if (cap) text = cap; }
       catch (e) { text += (text ? "\n\n" : "") + "(Rasm yaratib bo'lmadi: " + (e.message || e) + ")"; }
     } }
+  if (cfg.critique) for (const v of visuals) {
+    if (v.kind !== "svg" || (v.parts && v.parts.length)) continue;
+    const nc = await critiqueSvg(v, chat.messages[upto] && chat.messages[upto].text);
+    if (nc) { v.code = nc; v.checked = "fixed"; text += (text ? "\n\n" : "") + "(Rasm chizilgach tekshirildi va tuzatildi.)"; } else v.checked = "ok";
+  }
   if (visuals.length) text = text.replace(/^[ \t]*\{\s*"(?:expr|title|labels|series|query|op|steps)"[^\n]*\}[ \t]*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();   // model asbob argumentini matnga yozib qo'ysa
   if (!visuals.some(v => v.kind === "diagram")) {   // ba'zi modellar asbob o'rniga ```mermaid blok yozadi: uni diagramma kartochkasiga aylantiramiz
     const mm0 = /```mermaid\s*\n([\s\S]*?)```/i.exec(text);
@@ -1854,6 +1960,7 @@ async function gemini(chat, upto) {
     const what = visuals.map(v => v.kind === "graph" ? "Interaktiv funksiya grafigi: " + v.title + " | y = " + v.exprs.join(" ; y = ") + " | x: " + v.xmin + " dan " + v.xmax + " gacha" : v.kind === "chart" ? "Grafik: " + v.title + " " + JSON.stringify({ labels: v.labels.slice(0, 14), series: v.series.map(s => ({ name: s.name, values: s.values.slice(0, 14) })), unit: v.unit })
       : v.kind === "steps" ? "Bosqichli rasmlar: " + v.title + " | " + v.steps.map((s, i) => (i + 1) + ") " + s.title + ": " + s.text).join(" ")
       : v.kind === "svg" ? "Rasm: " + v.title + (v.parts ? " | qismlar: " + v.parts.map(p => p.name + " (" + p.text + ")").join("; ") : "")
+      : v.kind === "icons" ? "Tayyor ikonkalar: " + v.title + " | " + v.items.map(x => x.name).join(", ")
       : v.kind === "image" ? "AI yaratgan rasm: " + v.title + " | tavsif: " + v.prompt
       : v.kind === "photo" ? "Internetdan topilgan rasmlar (foydalanuvchi tanlaydi): " + v.title : "Diagramma: " + v.title + "\n" + v.code).concat(files.map(f => "Fayl: " + f.name)).join("\n");
     for (let t = 0; t < 2 && !text.trim(); t++) {
@@ -2137,6 +2244,7 @@ $("#msgs").addEventListener("click", async ev => {
   if (act === "vopen") {
     { const vv = m.visuals[+b.closest(".vis").dataset.vi]; if (vv.kind === "photo" && vv.chosen == null) return; } const vi = +b.closest(".vis").dataset.vi; if (m.visuals[vi].kind === "diagram" && !mm.cache.get((isDark() ? "d|" : "l|") + m.visuals[vi].code)) { toast("Diagramma hali chizilmagan"); return; } openViewer(m, vi); return; }
   if (act === "vdl") { downloadVisual(m, +b.closest(".vis").dataset.vi); return; }
+  if (act === "vpng") { downloadVisual(m, +b.closest(".vis").dataset.vi, true); return; }
   if (act === "vregen") {
     const vi = +b.closest(".vis").dataset.vi, v = m.visuals[vi], cid = chat.id;
     if (!v || !v.prompt) return;
@@ -2234,11 +2342,11 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-06.35";
+const BUILD = "2026-11-06.36";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-oakey").value = cfg.oakey; $("#s-oamodel").value = cfg.oamodel; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
-  $("#s-branch").value = cfg.branch; $("#s-sys").value = sysPrompt();
+  $("#s-branch").value = cfg.branch; $("#s-critique").checked = cfg.critique; $("#s-sys").value = sysPrompt();
   $("#s-modelBtn").innerHTML = ic("sparkle") + "<span>" + esc(cfg.model || "Tanlanmagan. Bosib tanlang") + "</span>";
   $("#drawer").hidden = true; $("#picker").hidden = true; $("#settings").hidden = false; $("#scrim").hidden = false;
 }
@@ -2250,6 +2358,7 @@ $("#btnSave").addEventListener("click", async () => {
   cfg.oakey = $("#s-oakey").value.trim(); cfg.oamodel = $("#s-oamodel").value.trim() || "gpt-image-1-mini";
   cfg.repo = $("#s-repo").value.trim(); cfg.branch = $("#s-branch").value.trim() || "main";
   ["gkey", "oakey", "oamodel", "ghtoken", "repo", "branch"].forEach(k => LS.set(k, cfg[k]));
+  cfg.critique = $("#s-critique").checked; LS.set("critique", cfg.critique ? "1" : "0");
   LS.set("sys", $("#s-sys").value.trim() === SYS.trim() ? "" : $("#s-sys").value.trim());
   closeSettings(); render();
   if (canRead()) syncNow();
