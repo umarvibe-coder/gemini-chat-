@@ -314,6 +314,10 @@ footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
 .st { font: 600 12px var(--sans); } .st.ok { color: var(--claude); } .st.bad { color: var(--danger); }
 .tex[data-d="1"] { display: block; overflow-x: auto; padding: 4px 0; }
 .tex:not([data-done]) { font-family: var(--codefont); font-size: .92em; }
+.gbody { touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.glist { font: 600 13px var(--sans); color: var(--ink); padding: 6px 2px 2px; overflow-wrap: anywhere; }
+.glist span { color: var(--muted); }
+.ghint { font: 500 11.5px var(--sans); color: var(--muted); padding: 2px 2px 6px; }
 </style>
 </head>
 <body>
@@ -880,6 +884,63 @@ function funcChart(a) {
   if (labels.length < 3) return null;
   return { kind: "chart", title: String(a.title || "Funksiya grafigi").slice(0, 120), type: "line", labels, series: exs.map((e, k) => ({ name: "y = " + String(e).replace(/^\s*y\s*=\s*/i, "").slice(0, 40), values: vals[k] })), unit: "", expr: exs.map(e => String(e).slice(0, 120)).join(" ; ") };
 }
+/* ---------- interaktiv funksiya grafigi (Desmos kabi): surish, kattalashtirish, nuqtaga bosish, kesishishlar ---------- */
+const gFns = new Map(), graphV = new Map();
+const gFn = e => { if (!gFns.has(e)) gFns.set(e, compileExpr(e)); return gFns.get(e); };
+const gKey = (mid, vi) => mid + ":" + vi;
+const gFmt = n => { if (!Number.isFinite(n)) return "?"; const a = Math.abs(n); if (a !== 0 && (a >= 1e6 || a < 1e-3)) return n.toExponential(1).replace("e+", "e"); return String(Math.round(n * 1e4) / 1e4); };
+function gDefaultView(v) {
+  const fs = v.exprs.map(gFn).filter(Boolean); let x0 = +v.xmin, x1 = +v.xmax; if (!(x1 > x0)) { x0 = -6; x1 = 6; }
+  const ys = []; for (let i = 0; i <= 300; i++) for (const f of fs) { const y = f(x0 + (x1 - x0) * i / 300); if (Number.isFinite(y)) ys.push(y); }
+  ys.sort((a, b) => a - b); let lo = -5, hi = 5;
+  if (ys.length) { lo = ys[Math.floor(ys.length * 0.03)]; hi = ys[Math.min(ys.length - 1, Math.floor(ys.length * 0.97))]; }
+  if (hi - lo < 1e-6) { lo -= 1; hi += 1; } const pad = (hi - lo) * 0.12;
+  return { x0, x1, y0: lo - pad, y1: hi + pad, sel: null };
+}
+const graphView = (m, vi, v) => { const k = gKey(m.id, vi); if (!graphV.has(k)) graphV.set(k, gDefaultView(v)); return graphV.get(k); };
+function gCross(v, V) {
+  const fs = v.exprs.map(gFn), out = [], N = 600;
+  const pairs = []; if (fs.length === 1) pairs.push([0, -1]); else for (let i = 0; i < fs.length; i++) for (let j = i + 1; j < fs.length; j++) pairs.push([i, j]);
+  for (const [i, j] of pairs) { const fi = fs[i], fj = j < 0 ? () => 0 : fs[j]; if (!fi || !fj) continue; const d = x => fi(x) - fj(x); let px = V.x0, py = d(px);
+    for (let k = 1; k <= N; k++) { const x = V.x0 + (V.x1 - V.x0) * k / N, y = d(x);
+      if (Number.isFinite(py) && Number.isFinite(y) && py * y <= 0 && !(py === 0 && y === 0)) { let a = px, b = x; for (let t = 0; t < 45; t++) { const mm = (a + b) / 2; if (d(a) * d(mm) <= 0) b = mm; else a = mm; }
+        const rx = (a + b) / 2, ry = fi(rx); if (Number.isFinite(ry) && Math.abs(d(rx)) < 1e-6 * (1 + Math.abs(ry)) && !out.some(q => Math.abs(q[0] - rx) < (V.x1 - V.x0) * 1e-4 && Math.abs(q[1] - ry) < 1e-6 * (1 + Math.abs(ry)))) out.push([rx, ry]); }
+      px = x; py = y; } }
+  return out.sort((a, b) => a[0] - b[0]).slice(0, 8);
+}
+function graphList(v, V) {
+  const c = gCross(v, V), lab = v.exprs.length === 1 ? "Ox bilan kesishish" : "Kesishish nuqtalari";
+  return c.length ? "<b>" + lab + ":</b> " + c.map(p => "(" + gFmt(Math.round(p[0] * 1e6) / 1e6) + "; " + gFmt(Math.round(p[1] * 1e6) / 1e6) + ")").join(", ") : "<span>Ko'rinadigan oraliqda " + (v.exprs.length === 1 ? "Ox bilan kesishish" : "kesishish") + " yo'q</span>";
+}
+function graphSvg(v, V, uid) {
+  const T = themeColors(), W = 800, H = 560, L = 54, R = 12, Tp = 12, B = 30, pw = W - L - R, ph = H - Tp - B;
+  const sx = x => L + (x - V.x0) / (V.x1 - V.x0) * pw, sy = y => Tp + (V.y1 - y) / (V.y1 - V.y0) * ph;
+  let o = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" font-family="Nunito, system-ui, Arial, sans-serif"><rect width="800" height="560" fill="' + T.surface + '"/><defs><clipPath id="gc' + uid + '"><rect x="' + L + '" y="' + Tp + '" width="' + pw + '" height="' + ph + '"/></clipPath></defs>';
+  const tx = niceStep((V.x1 - V.x0) / 7), ty = niceStep((V.y1 - V.y0) / 8);
+  for (let x = Math.ceil(V.x0 / tx) * tx, n = 0; x <= V.x1 && n < 40; x += tx, n++) { const X = sx(x).toFixed(1); o += '<line x1="' + X + '" x2="' + X + '" y1="' + Tp + '" y2="' + (Tp + ph) + '" stroke="' + T.line + '"/><text x="' + X + '" y="' + (H - 10) + '" text-anchor="middle" font-size="12" fill="' + T.muted + '">' + gFmt(Math.round(x * 1e6) / 1e6) + "</text>"; }
+  for (let y = Math.ceil(V.y0 / ty) * ty, n = 0; y <= V.y1 && n < 40; y += ty, n++) { const Y = sy(y).toFixed(1); o += '<line y1="' + Y + '" y2="' + Y + '" x1="' + L + '" x2="' + (L + pw) + '" stroke="' + T.line + '"/><text x="' + (L - 6) + '" y="' + (+Y + 4) + '" text-anchor="end" font-size="12" fill="' + T.muted + '">' + gFmt(Math.round(y * 1e6) / 1e6) + "</text>"; }
+  if (V.y0 < 0 && V.y1 > 0) o += '<line x1="' + L + '" x2="' + (L + pw) + '" y1="' + sy(0).toFixed(1) + '" y2="' + sy(0).toFixed(1) + '" stroke="' + T.ink + '" stroke-width="1.8"/>';
+  if (V.x0 < 0 && V.x1 > 0) o += '<line y1="' + Tp + '" y2="' + (Tp + ph) + '" x1="' + sx(0).toFixed(1) + '" x2="' + sx(0).toFixed(1) + '" stroke="' + T.ink + '" stroke-width="1.8"/>';
+  o += '<g clip-path="url(#gc' + uid + ')" fill="none" stroke-width="3" stroke-linejoin="round">';
+  const span = V.y1 - V.y0;
+  v.exprs.forEach((e, i) => { const f = gFn(e); if (!f) return; let d = "", pen = false, py = null;
+    for (let k = 0; k <= 520; k++) { const x = V.x0 + (V.x1 - V.x0) * k / 520, y = f(x);
+      if (!Number.isFinite(y) || Math.abs(y - V.y0) > span * 40 || (py !== null && Math.abs(y - py) > span * 1.2)) { pen = false; py = Number.isFinite(y) ? y : null; continue; }
+      d += (pen ? "L" : "M") + sx(x).toFixed(1) + " " + sy(y).toFixed(1); pen = true; py = y; }
+    o += '<path d="' + d + '" stroke="' + T.col(i) + '"/>'; });
+  o += "</g>";
+  gCross(v, V).forEach(p => { o += '<circle cx="' + sx(p[0]).toFixed(1) + '" cy="' + sy(p[1]).toFixed(1) + '" r="5" fill="' + T.surface + '" stroke="' + T.ink + '" stroke-width="2"/>'; });
+  const usedLy = [];
+  if (V.sel != null) { const X = sx(V.sel); o += '<line x1="' + X.toFixed(1) + '" x2="' + X.toFixed(1) + '" y1="' + Tp + '" y2="' + (Tp + ph) + '" stroke="' + T.muted + '" stroke-dasharray="5 4"/>';
+    v.exprs.forEach((e, i) => { const f = gFn(e), y = f && f(V.sel); if (!Number.isFinite(y)) return; const Y = sy(y); if (Y < Tp || Y > Tp + ph) return;
+      const lx = Math.min(X + 10, L + pw - 130); let ly = Math.max(Tp + 16, Math.min(Y - 10, Tp + ph - 4)); while (usedLy.some(u => Math.abs(u - ly) < 17)) ly += 17; usedLy.push(ly);
+      o += '<circle cx="' + X.toFixed(1) + '" cy="' + Y.toFixed(1) + '" r="6" fill="' + T.col(i) + '" stroke="' + T.surface + '" stroke-width="2"/><text x="' + lx.toFixed(1) + '" y="' + ly.toFixed(1) + '" font-size="14" font-weight="800" fill="' + T.ink + '" stroke="' + T.surface + '" stroke-width="4" paint-order="stroke">(' + gFmt(Math.round(V.sel * 1e4) / 1e4) + "; " + gFmt(Math.round(y * 1e4) / 1e4) + ")</text>"; }); }
+  v.exprs.forEach((e, i) => { o += '<rect x="' + (L + 10) + '" y="' + (Tp + 10 + i * 20) + '" width="16" height="4" rx="2" fill="' + T.col(i) + '"/><text x="' + (L + 32) + '" y="' + (Tp + 17 + i * 20) + '" font-size="14" font-weight="700" fill="' + T.ink + '" stroke="' + T.surface + '" stroke-width="4" paint-order="stroke">y = ' + xe(String(e).replace(/^\s*y\s*=\s*/i, "").slice(0, 36)) + "</text>"; });
+  o += '<rect x="' + L + '" y="' + Tp + '" width="' + pw + '" height="' + ph + '" fill="none" stroke="' + T.line + '" stroke-width="1.5"/></svg>';
+  return o;
+}
+function gRefresh(vis, m, vi) { const v = m.visuals[vi], V = graphView(m, vi, v); vis.querySelector(".gbody").innerHTML = graphSvg(v, V, "c" + m.id.slice(0, 6) + vi); vis.querySelector(".glist").innerHTML = graphList(v, V); }
+const gZoom = (V, cx, cy, f) => { V.x0 = cx - (cx - V.x0) * f; V.x1 = cx + (V.x1 - cx) * f; V.y0 = cy - (cy - V.y0) * f; V.y1 = cy + (V.y1 - cy) * f; };
 /* bosqichli rasm: bitta bosqich (rasm + sarlavha + matn) */
 function stepSvg(v, k, uid) {
   const st = v.steps[k]; if (!st) return null;
@@ -1028,7 +1089,11 @@ function parseVisuals(parts) {
       { const vis = { kind: "svg", title: String(a.title || "Rasm").slice(0, 120), code: a.svg.replace(/^```(?:svg|xml)?\s*|```\s*$/g, "").trim() };
         if (Array.isArray(a.parts)) { const ps = a.parts.slice(0, 8).filter(p => p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))).map(p => ({ x: Number(p.x), y: Number(p.y), name: String(p.name || "").slice(0, 40), text: String(p.text || "").slice(0, 120) })); if (ps.length) vis.parts = ps; }
         out.push(vis); }
-    if (fc.name === "plot_function" && a.expr) { const ch = funcChart(a); if (ch) out.push(ch); }
+    if (fc.name === "plot_function" && a.expr) {
+      const exs = [a.expr, a.expr2, a.expr3].filter(e => e && String(e).trim()).map(e => String(e).replace(/^\s*y\s*=\s*/i, "").slice(0, 120));
+      if (exs.length && exs.every(e => gFn(e))) { let x0 = Number(a.xmin), x1 = Number(a.xmax); if (!Number.isFinite(x0) || !Number.isFinite(x1) || x0 === x1) { x0 = -6; x1 = 6; } if (x0 > x1) [x0, x1] = [x1, x0];
+        out.push({ kind: "graph", title: String(a.title || "Funksiya grafigi").slice(0, 120), exprs: exs, xmin: x0, xmax: x1 }); }
+    }
     if (fc.name === "show_steps" && Array.isArray(a.steps)) {
       const steps = a.steps.slice(0, 6).filter(s => s && typeof s.svg === "string" && s.svg.trim()).map(s => ({ title: String(s.title || "").replace(/^\s*(\d+|qadam|bosqich)\s*[.):-]+\s*/i, "").slice(0, 60), text: String(s.text || "").slice(0, 240), code: s.svg.replace(/^```(?:svg|xml)?\s*|```\s*$/g, "").trim() }));
       if (steps.length >= 2) out.push({ kind: "steps", title: String(a.title || "Bosqichlar").slice(0, 120), steps });
@@ -1244,15 +1309,17 @@ function visualHtml(m) {
           '<div class="pact">' + (v.parts && v.parts.length ? "" : '<button class="pbtn acc" data-act="pannot">' + ic("sparkle") + " Gemini izohlasin</button>") + '<button class="pbtn" data-act="punpick">Boshqa rasm</button></div>' +
           '<div class="credit">Muallif: ' + esc(it.author) + " · " + (it.licenseUrl ? '<a href="' + esc(it.licenseUrl) + '" target="_blank" rel="noopener">' + esc(it.license) + "</a>" : esc(it.license)) + (it.page ? ' · <a href="' + esc(it.page) + '" target="_blank" rel="noopener">Wikimedia Commons</a>' : "") + "</div>"; }
     }
+    else if (v.kind === "graph") { const V = graphView(m, i, v);
+      inner = '<div class="vbody gbody">' + graphSvg(v, V, "c" + m.id.slice(0, 6) + i) + '</div><div class="glist">' + graphList(v, V) + '</div><div class="pact stp"><button class="pbtn" data-act="gzout" aria-label="Kichraytirish">−</button><button class="pbtn" data-act="gzin" aria-label="Kattalashtirish">+</button><button class="pbtn" data-act="greset">Boshiga</button></div><div class="ghint">Surish: barmoq. Kattalashtirish: ikki barmoq. Nuqtani bosing: koordinata.</div>'; }
     else if (v.kind === "steps") { const k = curStep(m, i, v), n = v.steps.length, sv = stepSvg(v, k, "c" + m.id.slice(0, 6) + i);
       inner = '<div class="vbody" data-act="vopen">' + (sv || '<div class="verr">Rasmni chizib bo\'lmadi.</div>') + "</div>" +
         '<div class="pact stp"><button class="pbtn" data-act="sprev"' + (k === 0 ? " disabled" : "") + ">‹ Oldingi</button><span class=\"sdots\">" + v.steps.map((_, j) => '<i class="' + (j === k ? "on" : "") + '"></i>').join("") + '</span><button class="pbtn acc" data-act="snext"' + (k === n - 1 ? " disabled" : "") + ">Keyingi ›</button></div>"; }
     else if (v.kind === "svg") { const sv = svgOf(v, "c" + m.id.slice(0, 6) + i); inner = '<div class="vbody" data-act="vopen">' + (sv || '<div class="verr">Rasmni chizib bo\'lmadi. Manba kodini tekshiring.</div>') + "</div>"; }
     else { const c = mm.cache.get((isDark() ? "d|" : "l|") + v.code);
       inner = '<div class="vbody mmd" data-act="vopen" data-mid="' + esc(m.id) + '" data-vi="' + i + '"' + (c ? ' data-done="1"' : "") + ">" + (c || '<div class="verr">Diagramma chizilmoqda…</div>') + "</div>"; }
-    return '<div class="vis" data-vi="' + i + '"><div class="vhead"><span class="tile sm ' + (v.kind === "diagram" ? "k-audio" : "k-image") + '">' + ic(v.kind === "chart" ? "chart" : v.kind === "svg" || v.kind === "photo" || v.kind === "steps" ? "image" : "diagram") + '</span><span class="t">' + esc(v.title) + "</span>" +
+    return '<div class="vis" data-vi="' + i + '"><div class="vhead"><span class="tile sm ' + (v.kind === "diagram" ? "k-audio" : "k-image") + '">' + ic(v.kind === "chart" || v.kind === "graph" ? "chart" : v.kind === "svg" || v.kind === "photo" || v.kind === "steps" ? "image" : "diagram") + '</span><span class="t">' + esc(v.title) + "</span>" +
       '<button class="ab" data-act="vopen" title="Katta ko\'rish" aria-label="Katta ko\'rish">' + ic("expand") + '</button><button class="ab" data-act="vdl" title="SVG sifatida yuklash" aria-label="SVG sifatida yuklash">' + ic("download") + "</button></div>" + inner +
-      "<details><summary>Manba</summary><pre>" + esc(v.kind === "chart" ? JSON.stringify({ type: v.type, expr: v.expr, labels: v.labels, series: v.series, unit: v.unit }, null, 1) : v.kind === "steps" ? JSON.stringify(v.steps, null, 1) : v.kind === "photo" ? JSON.stringify({ query: v.query, chosen: v.chosen, items: v.items, parts: v.parts }, null, 1) : v.code + (v.parts ? "\n\n" + JSON.stringify(v.parts, null, 1) : "")) + "</pre></details></div>";
+      "<details><summary>Manba</summary><pre>" + esc(v.kind === "chart" ? JSON.stringify({ type: v.type, expr: v.expr, labels: v.labels, series: v.series, unit: v.unit }, null, 1) : v.kind === "steps" ? JSON.stringify(v.steps, null, 1) : v.kind === "graph" ? JSON.stringify({ exprs: v.exprs, xmin: v.xmin, xmax: v.xmax }, null, 1) : v.kind === "photo" ? JSON.stringify({ query: v.query, chosen: v.chosen, items: v.items, parts: v.parts }, null, 1) : v.code + (v.parts ? "\n\n" + JSON.stringify(v.parts, null, 1) : "")) + "</pre></details></div>";
   }).join("") + "</div>";
 }
 function downloadVisual(m, vi) {
@@ -1262,6 +1329,7 @@ function downloadVisual(m, vi) {
     const it = v.items && v.items[v.chosen]; if (!it) { toast("Avval rasmni tanlang", "err"); return; }
     fetch(it.url).then(r => r.blob()).then(blobB64).then(du => { saveSvg(photoSvg(v, du), v.title); }).catch(() => toast("Rasmni yuklab bo'lmadi", "err")); return;
   }
+  else if (v.kind === "graph") svg = graphSvg(v, graphView(m, vi, v), "dl");
   else if (v.kind === "steps") { svg = stepSvg(v, curStep(m, vi, v), "dl"); if (!svg) { toast("Rasm kodi xato", "err"); return; } }
   else if (v.kind === "svg") { svg = svgOf(v, "dl"); if (!svg) { toast("Rasm kodi xato", "err"); return; } }
   else { const el = document.querySelector('.vis[data-vi="' + vi + '"] .mmd svg'); if (!el) { toast("Diagramma hali chizilmadi", "err"); return; } svg = new XMLSerializer().serializeToString(el); }
@@ -1301,6 +1369,7 @@ function vwSvgFor(v) {
   if (v.kind === "chart") return chartSvg(v);
   if (v.kind === "svg") return svgOf(v, "vw") || "";
   if (v.kind === "steps") return stepSvg(v, curStep(vw.m, vw.i, v), "vw") || "";
+  if (v.kind === "graph") return graphSvg(v, graphView(vw.m, vw.i, v), "vw");
   if (v.kind === "photo") return photoSvg(v) || "";
   const c = mm.cache.get((isDark() ? "d|" : "l|") + v.code); return c || "";
 }
@@ -1492,7 +1561,7 @@ function buildContents(chat, upto) {
   let last = -1; msgs.forEach((m, i) => { if ((m.files && m.files.length) || (m.visuals && m.visuals.length)) last = i; });
   return msgs.map((m, i) => {
     let t = m.text || "";
-    (m.visuals || []).forEach(v => { t += "\n[" + (v.kind === "chart" ? "Grafik" : v.kind === "svg" ? "Rasm (SVG)" : v.kind === "photo" ? "Internetdan rasm" : v.kind === "steps" ? "Bosqichli rasmlar" : "Diagramma") + ": " + v.title + "]" + (i === last ? "\n" + (v.kind === "chart" ? JSON.stringify({ type: v.type, labels: v.labels, series: v.series }) : v.kind === "steps" ? JSON.stringify(v.steps.map(x => ({ title: x.title, text: x.text }))) : v.code) : ""); });
+    (m.visuals || []).forEach(v => { t += "\n[" + (v.kind === "chart" ? "Grafik" : v.kind === "svg" ? "Rasm (SVG)" : v.kind === "photo" ? "Internetdan rasm" : v.kind === "steps" ? "Bosqichli rasmlar" : v.kind === "graph" ? "Funksiya grafigi" : "Diagramma") + ": " + v.title + "]" + (i === last ? "\n" + (v.kind === "chart" ? JSON.stringify({ type: v.type, labels: v.labels, series: v.series }) : v.kind === "steps" ? JSON.stringify(v.steps.map(x => ({ title: x.title, text: x.text }))) : v.kind === "graph" ? JSON.stringify({ funksiyalar: v.exprs, xmin: v.xmin, xmax: v.xmax }) : v.code) : ""); });
     (m.files || []).forEach(f => { t += "\n[Fayl yaratildi: " + f.name + ", " + f.content.length + " belgi]" + (i === last ? "\n```\n" + f.content + "\n```" : ""); });
     return { role: m.role === "user" ? "user" : "model", parts: [{ text: t }] };
   }).filter(c => c.parts[0].text.trim());
@@ -1552,7 +1621,7 @@ async function gemini(chat, upto) {
     }
   }
   if (!text.trim() && useTools && (files.length || visuals.length)) {
-    const what = visuals.map(v => v.kind === "chart" ? "Grafik: " + v.title + " " + JSON.stringify({ labels: v.labels.slice(0, 14), series: v.series.map(s => ({ name: s.name, values: s.values.slice(0, 14) })), unit: v.unit })
+    const what = visuals.map(v => v.kind === "graph" ? "Interaktiv funksiya grafigi: " + v.title + " | y = " + v.exprs.join(" ; y = ") + " | x: " + v.xmin + " dan " + v.xmax + " gacha" : v.kind === "chart" ? "Grafik: " + v.title + " " + JSON.stringify({ labels: v.labels.slice(0, 14), series: v.series.map(s => ({ name: s.name, values: s.values.slice(0, 14) })), unit: v.unit })
       : v.kind === "steps" ? "Bosqichli rasmlar: " + v.title + " | " + v.steps.map((s, i) => (i + 1) + ") " + s.title + ": " + s.text).join(" ")
       : v.kind === "svg" ? "Rasm: " + v.title + (v.parts ? " | qismlar: " + v.parts.map(p => p.name + " (" + p.text + ")").join("; ") : "")
       : v.kind === "photo" ? "Internetdan topilgan rasmlar (foydalanuvchi tanlaydi): " + v.title : "Diagramma: " + v.title + "\n" + v.code).concat(files.map(f => "Fayl: " + f.name)).join("\n");
@@ -1809,6 +1878,11 @@ $("#msgs").addEventListener("click", async ev => {
     });
     return;
   }
+  if (act === "gzin" || act === "gzout" || act === "greset") {
+    const vis = b.closest(".vis"), vi = +vis.dataset.vi, v = m.visuals[vi], k = gKey(m.id, vi);
+    if (act === "greset") graphV.delete(k); else { const V = graphView(m, vi, v); gZoom(V, (V.x0 + V.x1) / 2, (V.y0 + V.y1) / 2, act === "gzin" ? 0.6 : 1 / 0.6); }
+    gRefresh(vis, m, vi); return;
+  }
   if (act === "sprev" || act === "snext") {
     const vis = b.closest(".vis"), vi = +vis.dataset.vi, v = m.visuals[vi], k = Math.max(0, Math.min(v.steps.length - 1, curStep(m, vi, v) + (act === "snext" ? 1 : -1)));
     stepIdx.set(stepKey(m.id, vi), k);
@@ -1839,6 +1913,26 @@ $("#msgs").addEventListener("click", async ev => {
     failed.delete(id); withBusy(() => answerOne(chat.id, id));
   }
 });
+/* grafikni surish, kattalashtirish va nuqtani bosish */
+{ const pts = new Map(); let st = null;
+  const ctx = body => { const vis = body.closest(".vis"), art = body.closest("[data-id]"), chat = curChat(), m = chat && art && chat.messages.find(x => x.id === art.dataset.id); if (!m) return null; const vi = +vis.dataset.vi, v = m.visuals[vi]; return { vis, m, vi, v, V: graphView(m, vi, v), svg: body.querySelector("svg") }; };
+  const geo = (V, svg, cx, cy) => { const r = svg.getBoundingClientRect(), k = 800 / r.width, px = (cx - r.left) * k, py = (cy - r.top) * k; return { k, x: V.x0 + (px - 54) / 734 * (V.x1 - V.x0), y: V.y1 - (py - 12) / 518 * (V.y1 - V.y0) }; };
+  let raf = 0; const redraw = c => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; gRefresh(c.vis, c.m, c.vi); }); };
+  const msgs = $("#msgs");
+  msgs.addEventListener("pointerdown", ev => { const body = ev.target.closest(".gbody"); if (!body) return; try { body.setPointerCapture(ev.pointerId); } catch (e) {}
+    pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY }); const q = [...pts.values()]; st = { t: Date.now(), moved: 0, body, d: q.length === 2 ? Math.hypot(q[0].x - q[1].x, q[0].y - q[1].y) : 0 }; });
+  msgs.addEventListener("pointermove", ev => { if (!st || !pts.has(ev.pointerId)) return; const c = ctx(st.body); if (!c || !c.svg) return;
+    const prev = pts.get(ev.pointerId), cur = { x: ev.clientX, y: ev.clientY }; st.moved += Math.abs(cur.x - prev.x) + Math.abs(cur.y - prev.y); const V = c.V;
+    pts.set(ev.pointerId, cur);
+    if (pts.size === 1) { const r = c.svg.getBoundingClientRect(), k = 800 / r.width, dx = (cur.x - prev.x) * k / 734 * (V.x1 - V.x0), dy = (cur.y - prev.y) * k / 518 * (V.y1 - V.y0); V.x0 -= dx; V.x1 -= dx; V.y0 += dy; V.y1 += dy; }
+    else if (pts.size === 2) { const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y); if (st.d > 0 && d > 0) { const g = geo(V, c.svg, (a.x + b.x) / 2, (a.y + b.y) / 2); gZoom(V, g.x, g.y, st.d / d); } st.d = d; }
+    redraw(c); });
+  const up = ev => { if (!pts.has(ev.pointerId)) return; pts.delete(ev.pointerId);
+    if (st && pts.size === 0 && st.moved < 8 && Date.now() - st.t < 500) { const c = ctx(st.body); if (c && c.svg) { const g = geo(c.V, c.svg, ev.clientX, ev.clientY); c.V.sel = c.V.sel != null && Math.abs(c.V.sel - g.x) < (c.V.x1 - c.V.x0) * 0.01 ? null : g.x; gRefresh(c.vis, c.m, c.vi); } }
+    if (pts.size === 0) st = null; else if (st) st.d = 0; };
+  msgs.addEventListener("pointerup", up); msgs.addEventListener("pointercancel", up);
+  msgs.addEventListener("wheel", ev => { const body = ev.target.closest(".gbody"); if (!body) return; ev.preventDefault(); const c = ctx(body); if (!c || !c.svg) return; const g = geo(c.V, c.svg, ev.clientX, ev.clientY); gZoom(c.V, g.x, g.y, ev.deltaY > 0 ? 1.15 : 1 / 1.15); redraw(c); }, { passive: false });
+}
 $("#send").addEventListener("click", send);
 $("#input").addEventListener("input", autosize);
 $("#input").addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
@@ -1880,7 +1974,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.25";
+const BUILD = "2026-11-05.26";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
