@@ -719,6 +719,7 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
    - "Rasm yarat", "rasm chiz", "foto", "realistik", "illyustratsiya", "tasavvur qil" kabi so'rovlarda (olma, manzara, hayvon, mahsulot, plakat): draw_image. show_svg ni faqat tuzilma sxemasi (qismlari belgilanadigan chizma), show_steps ni jarayon bosqichlari, show_chart ni raqamlar uchun ishlating.
    - draw_image dan keyin izoh 2-3 jumla bo'lsin: rasmda nima ko'rsatilgani. Uzun maqola yozmang.
    - prompt inglizcha, 30-70 so'z, tartib: ob'ekt va tafsilotlar, fon, uslub, kadr, yorug'lik, ranglar, sifat (masalan: "a ripe red apple with water droplets on a rustic wooden table, blurred kitchen background, realistic macro photo, close-up, soft morning window light, warm tones, highly detailed, sharp focus"). Rasmga yozuv qo'shishni so'ramang. Foydalanuvchi so'zi qisqa bo'lsa ham tavsifni o'zingiz boyiting. Bir javobda bittadan ortiq chaqirmang.
+   - Foydalanuvchi o'zi inglizcha tavsif bergan bo'lsa, uni so'zma-so'z, qisqartirmasdan prompt ga qo'ying. Hech narsani tashlab ketmang.
    - Siz yaratilgan rasmni o'zingiz ko'rmaysiz: izohda "ko'rinadi/tasvirlangan" deb da'vo qilmang, faqat nima so'ralganini ayting. (Sahifa rasmni alohida tekshirib, haqiqiy izoh qo'yishi mumkin.)
    - Foydalanuvchi rasm, PDF yoki matn fayl biriktirishi mumkin: ularni o'zingiz o'qib, mazmuniga qarab javob bering.
    - Foydalanuvchi xabari /asbob_nomi bilan boshlansa (masalan /draw_image), "[Foydalanuvchi aynan ... asbobini ishlatishni so'radi]" belgisi qo'shiladi: aynan shu asbobni chaqiring.
@@ -1411,7 +1412,7 @@ function visualHtml(m) {
     else { const c = mm.cache.get((isDark() ? "d|" : "l|") + v.code);
       inner = '<div class="vbody mmd" data-act="vopen" data-mid="' + esc(m.id) + '" data-vi="' + i + '"' + (c ? ' data-done="1"' : "") + ">" + (c || '<div class="verr">Diagramma chizilmoqda…</div>') + "</div>"; }
     return '<div class="vis" data-vi="' + i + '"><div class="vhead"><span class="tile sm ' + (v.kind === "diagram" ? "k-audio" : "k-image") + '">' + ic(v.kind === "chart" || v.kind === "graph" ? "chart" : v.kind === "svg" || v.kind === "photo" || v.kind === "steps" || v.kind === "image" ? "image" : "diagram") + '</span><span class="t">' + esc(v.title) + "</span>" +
-      '<button class="ab" data-act="vopen" title="Katta ko\'rish" aria-label="Katta ko\'rish">' + ic("expand") + '</button><button class="ab" data-act="vdl" title="SVG sifatida yuklash" aria-label="SVG sifatida yuklash">' + ic("download") + "</button></div>" + inner +
+      '<button class="ab" data-act="vopen" title="Katta ko\'rish" aria-label="Katta ko\'rish">' + ic("expand") + '</button>' + (v.kind === "image" ? '<button class="ab" data-act="vregen" title="Qayta yaratish" aria-label="Qayta yaratish">' + ic("redo") + "</button>" : "") + '<button class="ab" data-act="vdl" title="SVG sifatida yuklash" aria-label="SVG sifatida yuklash">' + ic("download") + "</button></div>" + inner +
       "<details><summary>Manba</summary><pre>" + esc(v.kind === "chart" ? JSON.stringify({ type: v.type, expr: v.expr, labels: v.labels, series: v.series, unit: v.unit }, null, 1) : v.kind === "steps" ? JSON.stringify(v.steps, null, 1) : v.kind === "graph" ? JSON.stringify({ exprs: v.exprs, xmin: v.xmin, xmax: v.xmax }, null, 1) : v.kind === "image" ? JSON.stringify({ prompt: v.prompt, provider: v.provider, w: v.w, h: v.h }, null, 1) : v.kind === "photo" ? JSON.stringify({ query: v.query, chosen: v.chosen, items: v.items, parts: v.parts }, null, 1) : v.code + (v.parts ? "\n\n" + JSON.stringify(v.parts, null, 1) : "")) + "</pre></details></div>";
   }).join("") + "</div>";
 }
@@ -1799,7 +1800,12 @@ async function gemini(chat, upto) {
   }
   { const dp = parts.find(p => p.functionCall && p.functionCall.name === "draw_image" && p.functionCall.args && String(p.functionCall.args.prompt || "").trim());
     if (dp) {
-      const a = dp.functionCall.args, pr = String(a.prompt).slice(0, 900), sz = ["square", "landscape", "portrait"].includes(a.size) ? a.size : "square";
+      const a = dp.functionCall.args; let pr = String(a.prompt).slice(0, 900), sz = ["square", "landscape", "portrait"].includes(a.size) ? a.size : "square";
+      if (fc && fc.tool === "draw_image" && fc.rest) {   // foydalanuvchi /draw_image bilan o'z tavsifini bergan: Gemini uni qisqartirmasin
+        let r = fc.rest; const sm = /^\(\s*size\s*:\s*(square|landscape|portrait)\s*\)\s*/i.exec(r);
+        if (sm) { sz = sm[1].toLowerCase(); r = r.slice(sm[0].length); }
+        if (r.length > 15 && /^[\x20-\x7e\u2018\u2019\u201c\u201d\n]+$/.test(r)) pr = r.slice(0, 1500);
+      }
       try { const im = await makeImage(pr, sz); visuals.push({ kind: "image", title: String(a.title || "Rasm").slice(0, 120), prompt: pr, src: im.src, w: im.w, h: im.h, provider: im.provider });
         const cap = await captionImage(im.src, pr); if (cap) text = cap; }
       catch (e) { text += (text ? "\n\n" : "") + "(Rasm yaratib bo'lmadi: " + (e.message || e) + ")"; }
@@ -2092,6 +2098,18 @@ $("#msgs").addEventListener("click", async ev => {
   if (act === "vopen") {
     { const vv = m.visuals[+b.closest(".vis").dataset.vi]; if (vv.kind === "photo" && vv.chosen == null) return; } const vi = +b.closest(".vis").dataset.vi; if (m.visuals[vi].kind === "diagram" && !mm.cache.get((isDark() ? "d|" : "l|") + m.visuals[vi].code)) { toast("Diagramma hali chizilmagan"); return; } openViewer(m, vi); return; }
   if (act === "vdl") { downloadVisual(m, +b.closest(".vis").dataset.vi); return; }
+  if (act === "vregen") {
+    const vi = +b.closest(".vis").dataset.vi, v = m.visuals[vi], cid = chat.id;
+    if (!v || !v.prompt) return;
+    await withBusy(async () => {
+      toast("Rasm qayta yaratilmoqda…");
+      const size = v.w / v.h > 1.2 ? "landscape" : v.h / v.w > 1.2 ? "portrait" : "square";
+      const im = await makeImage(v.prompt, size), cap = await captionImage(im.src, v.prompt);
+      await mutate(cid, c => { const mm = c.messages.find(x => x.id === id); if (!mm || !mm.visuals || !mm.visuals[vi]) return;
+        Object.assign(mm.visuals[vi], { src: im.src, w: im.w, h: im.h, provider: im.provider }); if (cap) { (mm.prev = mm.prev || []).push(mm.text); mm.text = cap; } });
+    });
+    return;
+  }
   if (act === "copy") copyText(m.text);
   else if (act === "edit") { state.editing = id; state.armed = null; render(); }
   else if (act === "cancel") { state.editing = null; render(); }
@@ -2177,7 +2195,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.32";
+const BUILD = "2026-11-06.33";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-oakey").value = cfg.oakey; $("#s-oamodel").value = cfg.oamodel; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
