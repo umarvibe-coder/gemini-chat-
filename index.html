@@ -449,6 +449,7 @@ if (window.DOMPurify) {
     if (n.tagName === "A") { n.setAttribute("target", "_blank"); n.setAttribute("rel", "noopener noreferrer"); }
   });
 }
+const deSandbox = t => String(t).replace(/\[([^\]]*)\]\((?:sandbox|file|computer):[^)]*\)/g, "$1");
 function md(t) {
   try {
     if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(t, { gfm: true, breaks: true }));
@@ -540,11 +541,11 @@ async function createChat() {
 /* ---------- Gemini ---------- */
 const TOOLS = [{ functionDeclarations: [{
   name: "create_file",
-  description: "Foydalanuvchi uchun matnli fayl yaratadi (md, txt yoki csv). Foydalanuvchi fayl, hujjat, jadval yoki yuklab olinadigan narsa so'raganda chaqiring.",
+  description: "Foydalanuvchi uchun fayl yaratadi: md, txt, csv, pdf, docx (Word) yoki xlsx (Excel). Foydalanuvchi fayl, hujjat, jadval yoki yuklab olinadigan narsa so'raganda chaqiring. Fayl faqat shu asbob orqali yaratiladi.",
   parameters: { type: "OBJECT", properties: {
     filename: { type: "STRING", description: "Fayl nomi, kengaytmasiz yoki bilan (masalan: reja.md)" },
-    format: { type: "STRING", enum: ["md", "txt", "csv"], description: "md = Markdown, txt = oddiy matn, csv = jadval (vergul bilan ajratilgan)" },
-    content: { type: "STRING", description: "Faylning to'liq matni" }
+    format: { type: "STRING", enum: ["md", "txt", "csv", "pdf", "docx", "xlsx"], description: "md = Markdown, txt = oddiy matn, csv = jadval, pdf = PDF hujjat, docx = Word hujjat, xlsx = Excel jadval" },
+    content: { type: "STRING", description: "Faylning to'liq manba matni: pdf va docx uchun Markdown, xlsx va csv uchun CSV (birinchi qator sarlavha), md va txt uchun oddiy matn" }
   }, required: ["filename", "format", "content"] }
 }] }];
 const SYS = `Siz foydalanuvchining shaxsiy chatidagi aqlli yordamchisiz. Foydalanuvchi telefonda ishlaydi, shuning uchun javoblar qisqa, aniq va oson o'qiladigan bo'lsin.
@@ -558,6 +559,10 @@ TIL VA USLUB
 ASBOBLAR (faqat kerak bo'lganda, har so'rovga eng mos bittasini chaqiring)
 1) create_file: foydalanuvchi fayl, hujjat, jadval fayli yoki "yuklab olish" so'raganda.
    - md: hujjat, reja, konspekt. txt: oddiy matn. csv: jadval (birinchi qator sarlavha, vergul bilan ajrating, vergul bor katakni qo'shtirnoq ichiga oling).
+   - pdf: chiroyli hujjat/hisobot. docx: Word hujjati (tahrirlash uchun). Ikkalasining content maydoniga Markdown yozing: # sarlavha, ## bo'lim, - ro'yxat, 1. raqamli ro'yxat, **qalin**, | jadval | qatorlari |. Rasm qo'llab-quvvatlanmaydi.
+   - xlsx: Excel jadvali. content maydoniga CSV yozing (birinchi qator sarlavha). Hisob uchun formula yozish mumkin, masalan =B2*C2 (faqat 2-qatordan boshlab).
+   - Foydalanuvchi "pdf", "word" yoki "excel" desa, aynan shu formatni tanlang.
+   - Hech qachon havola yozmang (sandbox:, file:// va hokazo). Fayl kartochkada o'zi chiqadi, yuklab olish tugmasi bor.
    - Fayl nomi foydalanuvchi tilida, qisqa, kengaytmasi bilan.
    - Fayl matnini chatda takrorlamang, chatga 1-2 jumla yozing.
    - Grafik yoki sxema uchun kod (.py va hokazo) fayli yaratmang.
@@ -575,9 +580,10 @@ SIFAT
 - So'ralmagan narsa qo'shmang, ortiqcha asbob chaqirmang.
 - Ma'lumot yetishmasa, avval bitta aniqlovchi savol bering.`;
 const sysPrompt = () => LS.get("sys") || SYS;
+const FILE_FORMATS = ["md", "txt", "csv", "pdf", "docx", "xlsx"], BIN_FORMATS = ["pdf", "docx", "xlsx"];
 const cleanName = (n, fmt) => {
   let x = String(n || "fayl").replace(/[\\\/:*?"<>|\x00-\x1f]/g, "_").trim().slice(0, 80) || "fayl";
-  if (!x.toLowerCase().endsWith("." + fmt)) x = x.replace(/\.(md|txt|csv)$/i, "") + "." + fmt;
+  if (!x.toLowerCase().endsWith("." + fmt)) x = x.replace(/\.(md|txt|csv|pdf|docx|xlsx)$/i, "") + "." + fmt;
   return x;
 };
 /* ---------- vizual javoblar: grafik (o'z SVG) va diagramma (Mermaid) ---------- */
@@ -909,6 +915,14 @@ const vwUp = e => {
 };
 vwBody().addEventListener("pointerup", vwUp); vwBody().addEventListener("pointercancel", vwUp);
 
+const bytesB64 = u => { let bin = ""; for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(bin); };
+let docgenP = null;
+function loadDocGen() {
+  if (window.DocGen) return Promise.resolve();
+  if (!docgenP) docgenP = new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = "docgen.js?v=" + BUILD; sc.onload = ok; sc.onerror = () => { docgenP = null; no(new Error("docgen.js yuklanmadi")); }; document.head.appendChild(sc); });
+  return docgenP;
+}
+async function fileBytes(f) { await loadDocGen(); return DocGen.build(f.format, f.name, f.content); }
 const fmtSize = n => n < 1024 ? n + " B" : (n / 1024).toFixed(1) + " KB";
 function buildContents(chat, upto) {
   const msgs = chat.messages.slice(0, upto + 1);
@@ -941,7 +955,7 @@ async function gemini(chat, upto) {
   const parts = (c && c.content && c.content.parts) || [];
   const text = parts.map(p => p.text || "").join("");
   const files = parts.filter(p => p.functionCall && p.functionCall.name === "create_file" && p.functionCall.args && typeof p.functionCall.args.content === "string")
-    .map(p => { const a = p.functionCall.args; const fm = ["md", "txt", "csv"].includes(a.format) ? a.format : "txt"; return { name: cleanName(a.filename, fm), format: fm, content: a.content }; });
+    .map(p => { const a = p.functionCall.args; const fm = FILE_FORMATS.includes(a.format) ? a.format : "txt"; return { name: cleanName(a.filename, fm), format: fm, content: a.content }; });
   const visuals = parseVisuals(parts);
   if (!text && !files.length && !visuals.length) {
     const why = (c && c.finishReason) || (j.promptFeedback && j.promptFeedback.blockReason) || "";
@@ -1068,7 +1082,7 @@ function msgHtml(m) {
   if (state.editing === m.id) {
     body = '<textarea class="editbox" id="editbox">' + esc(m.text) + "</textarea>";
   } else {
-    body = !m.text ? "" : isU ? '<div class="body plain">' + esc(m.text) + "</div>" : '<div class="body md">' + md(m.text) + "</div>";
+    body = !m.text ? "" : isU ? '<div class="body plain">' + esc(m.text) + "</div>" : '<div class="body md">' + md(deSandbox(m.text)) + "</div>";
   }
   let acts;
   if (state.editing === m.id) {
@@ -1090,7 +1104,7 @@ function msgHtml(m) {
   if (m.files && m.files.length) {
     fh = '<div class="files">' + m.files.map((f, i) =>
       '<div class="file" data-fi="' + i + '"><div class="top"><span class="tile sm k-other">' + ic("file") + '</span><div class="tx"><span class="t">' + esc(f.name) + '</span><span class="s">' +
-      f.format.toUpperCase() + " · " + fmtSize(new Blob([f.content]).size) + (f.saved ? " · repo'da: " + esc(f.saved) : "") + '</span></div>' +
+      f.format.toUpperCase() + " · " + fmtSize(new Blob([f.content]).size) + (BIN_FORMATS.includes(f.format) ? " (manba)" : "") + (f.saved ? " · repo'da: " + esc(f.saved) : "") + '</span></div>' +
       '<button class="ab" data-act="fdl" title="Telefonga yuklab olish" aria-label="Telefonga yuklab olish">' + ic("download") + '</button>' +
       '<button class="ab" data-act="fsave" title="Repo\'ga saqlash" aria-label="Repo\'ga saqlash">' + ic("upload") + '</button></div>' +
       '<details><summary>Ko\'rish</summary><pre>' + esc(f.content) + '</pre></details></div>').join("") + "</div>";
@@ -1169,16 +1183,21 @@ $("#msgs").addEventListener("click", async ev => {
     const fi = +b.closest(".file").dataset.fi, f = m.files && m.files[fi];
     if (!f) return;
     if (act === "fdl") {
-      const mime = { md: "text/markdown", txt: "text/plain", csv: "text/csv" }[f.format] || "text/plain";
-      const blob = new Blob([f.format === "csv" ? "\ufeff" + f.content : f.content], { type: mime + ";charset=utf-8" });
-      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = f.name;
-      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      toast("Yuklab olindi: " + f.name);
+      await withBusy(async () => {
+        const bin = BIN_FORMATS.includes(f.format);
+        const mime = { md: "text/markdown", txt: "text/plain", csv: "text/csv" }[f.format] || "text/plain";
+        const blob = bin ? new Blob([await fileBytes(f)], { type: DocGen.MIME[f.format] })
+          : new Blob([f.format === "csv" ? "\ufeff" + f.content : f.content], { type: mime + ";charset=utf-8" });
+        const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = f.name;
+        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+        toast("Yuklab olindi: " + f.name);
+      });
     } else {
       await withBusy(async () => {
         const path = "files/" + chat.id + "/" + f.name;
         let sha; try { sha = (await gh("GET", path)).sha; } catch (e) { if (e.status !== 404) throw e; }
-        await gh("PUT", path, { message: "file " + path, content: enc(f.content), branch: cfg.branch, ...(sha ? { sha } : {}) });
+        const b64 = BIN_FORMATS.includes(f.format) ? bytesB64(await fileBytes(f)) : enc(f.content);
+        await gh("PUT", path, { message: "file " + path, content: b64, branch: cfg.branch, ...(sha ? { sha } : {}) });
         await mutate(chat.id, c => { const x = c.messages.find(y => y.id === id); if (x && x.files && x.files[fi]) x.files[fi].saved = path; });
         toast("Repo'ga saqlandi: " + path);
       });
@@ -1248,7 +1267,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.11";
+const BUILD = "2026-11-05.12";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
