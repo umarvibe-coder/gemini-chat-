@@ -687,6 +687,7 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
    - Murakkab hisob, tenglama ildizi, hosila yoki integral kerak bo'lsa o'zingiz hisoblamang: calc ni chaqiring. Natija sizga qaytadi, keyin shuni qadamma-qadam tushuntiring. Natijani o'zgartirmang.
    - Natijada "xato" bo'lsa, buni foydalanuvchiga ayting va hisobni o'zingiz bajarganingizni belgilang (tekshirilmagan deb).
    - Formulalarni LaTeX bilan yozish mumkin: $x^2$ (qator ichida) yoki $$...$$ (alohida qatorda). Sahifa ularni chiroyli ko'rsatadi. Kod bloki (python) yozmang, foydalanuvchiga hisob kodi kerak emas.
+Tarixda \u27e6...\u27e7 ichidagi yozuvlar faqat sahifaning eslatmasi (oldin qanday vizual ko'rsatilgani). Ularni HECH QACHON o'zingiz yozmang: grafik, rasm yoki diagramma kerak bo'lsa, tegishli asbobni chaqiring, matnga belgi yozish vizual chiqarmaydi.
 Asbob chaqirgandan keyin chatga qisqa izoh yozing: nima ko'rsatildi va eng muhim xulosa nima (2-4 jumla). Izohsiz qoldirmang.
 
 VIZUAL JAVOB (muhim)
@@ -1561,8 +1562,8 @@ function buildContents(chat, upto) {
   let last = -1; msgs.forEach((m, i) => { if ((m.files && m.files.length) || (m.visuals && m.visuals.length)) last = i; });
   return msgs.map((m, i) => {
     let t = m.text || "";
-    (m.visuals || []).forEach(v => { t += "\n[" + (v.kind === "chart" ? "Grafik" : v.kind === "svg" ? "Rasm (SVG)" : v.kind === "photo" ? "Internetdan rasm" : v.kind === "steps" ? "Bosqichli rasmlar" : v.kind === "graph" ? "Funksiya grafigi" : "Diagramma") + ": " + v.title + "]" + (i === last ? "\n" + (v.kind === "chart" ? JSON.stringify({ type: v.type, labels: v.labels, series: v.series }) : v.kind === "steps" ? JSON.stringify(v.steps.map(x => ({ title: x.title, text: x.text }))) : v.kind === "graph" ? JSON.stringify({ funksiyalar: v.exprs, xmin: v.xmin, xmax: v.xmax }) : v.code) : ""); });
-    (m.files || []).forEach(f => { t += "\n[Fayl yaratildi: " + f.name + ", " + f.content.length + " belgi]" + (i === last ? "\n```\n" + f.content + "\n```" : ""); });
+    (m.visuals || []).forEach(v => { t += "\n\u27e6sahifa ko'rsatgan vizual: " + (v.kind === "chart" ? "Grafik" : v.kind === "svg" ? "Rasm (SVG)" : v.kind === "photo" ? "Internetdan rasm" : v.kind === "steps" ? "Bosqichli rasmlar" : v.kind === "graph" ? "Funksiya grafigi" : "Diagramma") + " \u2014 " + v.title + "\u27e7" + (i === last ? "\n" + (v.kind === "chart" ? JSON.stringify({ type: v.type, labels: v.labels, series: v.series }) : v.kind === "steps" ? JSON.stringify(v.steps.map(x => ({ title: x.title, text: x.text }))) : v.kind === "graph" ? JSON.stringify({ funksiyalar: v.exprs, xmin: v.xmin, xmax: v.xmax }) : v.code) : ""); });
+    (m.files || []).forEach(f => { t += "\n\u27e6sahifa yaratgan fayl: " + f.name + ", " + f.content.length + " belgi\u27e7" + (i === last ? "\n```\n" + f.content + "\n```" : ""); });
     return { role: m.role === "user" ? "user" : "model", parts: [{ text: t }] };
   }).filter(c => c.parts[0].text.trim());
 }
@@ -1597,6 +1598,18 @@ async function gemini(chat, upto) {
     cparts = (((j3.candidates || [])[0] || {}).content || {}).parts || [];
     parts = parts.concat(cparts);
     const t2 = cparts.map(p => p.text || "").join(""); if (t2) text += (text ? "\n\n" : "") + t2;
+  }
+  /* model asbobni chaqirmay, matnga "[Grafik: ...]" deb yozib qo'ysa: bir marta asbobni chaqirishni talab qilamiz */
+  const PH = /(?:\[|\u27e6)\s*(?:sahifa[^:\u2014\]\u27e7]*[:\u2014]\s*)?(?:Grafik|Diagramma|Rasm|Bosqichli rasmlar|Funksiya grafigi|Internetdan rasm|Fayl yaratildi)[^\]\u27e7\n]*(?:\]|\u27e7)/gi;
+  if (useTools && !parts.some(p => p.functionCall) && PH.test(text)) {
+    PH.lastIndex = 0;
+    try {
+      const r4 = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(cfg.model) + ":generateContent", { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.gkey },
+        body: JSON.stringify({ contents: contents.concat([{ role: "model", parts: [{ text }] }, { role: "user", parts: [{ text: "Siz grafik yoki rasm chizmadingiz, faqat matnga belgi yozdingiz. Hozir mos asbobni chaqiring (funksiya grafigi uchun plot_function, raqamlar uchun show_chart, sxema uchun show_diagram, bosqichli rasmlar uchun show_steps, rasm uchun show_svg yoki find_image). Matnni qaytarmang." }] }]), tools: TOOLS, systemInstruction: { parts: [{ text: sysPrompt() }] } }) });
+      const j4 = await r4.json().catch(() => ({}));
+      if (r4.ok) { const p4 = (((j4.candidates || [])[0] || {}).content || {}).parts || []; if (p4.some(p => p.functionCall)) parts = parts.concat(p4.filter(p => p.functionCall)); }
+    } catch (e) { /* matn bilan qoladi */ }
+    text = text.replace(PH, "").replace(/\n{3,}/g, "\n\n").trim();
   }
   const files = parts.filter(p => p.functionCall && p.functionCall.name === "create_file" && p.functionCall.args && typeof p.functionCall.args.content === "string")
     .map(p => { const a = p.functionCall.args; const fm = FILE_FORMATS.includes(a.format) ? a.format : "txt"; return { name: cleanName(a.filename, fm), format: fm, content: a.content }; });
@@ -1974,7 +1987,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.26";
+const BUILD = "2026-11-05.27";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
