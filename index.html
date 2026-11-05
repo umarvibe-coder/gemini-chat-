@@ -697,7 +697,8 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
    - Natijada "xato" bo'lsa, buni foydalanuvchiga ayting va hisobni o'zingiz bajarganingizni belgilang (tekshirilmagan deb).
    - Formulalarni LaTeX bilan yozish mumkin: $x^2$ (qator ichida) yoki $$...$$ (alohida qatorda). Sahifa ularni chiroyli ko'rsatadi. Kod bloki (python) yozmang, foydalanuvchiga hisob kodi kerak emas.
 9) draw_image (yangi rasm yaratish)
-   - Foydalanuvchi rasm chizib berishni so'rasa yoki realistik/badiiy illyustratsiya kerak bo'lsa: draw_image. Sxema, grafik, bosqichli chizma uchun show_svg, show_steps, show_chart ni ishlating.
+   - "Rasm yarat", "rasm chiz", "foto", "realistik", "illyustratsiya", "tasavvur qil" kabi so'rovlarda (olma, manzara, hayvon, mahsulot, plakat): draw_image. show_svg ni faqat tuzilma sxemasi (qismlari belgilanadigan chizma), show_steps ni jarayon bosqichlari, show_chart ni raqamlar uchun ishlating.
+   - draw_image dan keyin izoh 2-3 jumla bo'lsin: rasmda nima ko'rsatilgani. Uzun maqola yozmang.
    - prompt inglizcha, aniq: nima, qanday uslubda, qanday yorug'likda. Rasmga yozuv qo'shishni so'ramang. Bir javobda bittadan ortiq chaqirmang.
    - Rasm yaratilmasa (xato qaytsa), buni foydalanuvchiga rostgo'ylik bilan ayting va SVG bilan o'zingiz chizishni taklif qiling.
 Tarixda \u27e6...\u27e7 ichidagi yozuvlar faqat sahifaning eslatmasi (oldin qanday vizual ko'rsatilgani). Ularni HECH QACHON o'zingiz yozmang: grafik, rasm yoki diagramma kerak bo'lsa, tegishli asbobni chaqiring, matnga belgi yozish vizual chiqarmaydi.
@@ -2069,7 +2070,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.29";
+const BUILD = "2026-11-05.30";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-oakey").value = cfg.oakey; $("#s-oamodel").value = cfg.oamodel; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
