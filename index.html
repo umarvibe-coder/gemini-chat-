@@ -1131,13 +1131,19 @@ async function genOpenAI(prompt, size) {
 async function genFree(prompt, size) {   // kalitsiz servis: ishlashi kafolatlanmagan, shuning uchun xatoni ochiq aytamiz
   const [w, h] = size === "landscape" ? [1024, 683] : size === "portrait" ? [683, 1024] : [1024, 1024];
   const u = "https://image.pollinations.ai/prompt/" + encodeURIComponent(prompt) + "?width=" + w + "&height=" + h + "&nologo=true&seed=" + Math.floor(Math.random() * 1e6);
-  const ac = new AbortController(), to = setTimeout(() => ac.abort(), 90000);
-  let r;
-  try { r = await fetch(u, { signal: ac.signal }); }
-  catch (e) { throw new Error(e.name === "AbortError" ? "Bepul servis javob bermadi (vaqt tugadi)" : "Bepul servisga ulanib bo'lmadi"); }
-  finally { clearTimeout(to); }
-  const ct = r.headers.get("content-type") || "";
-  if (!r.ok || !/^image\//.test(ct)) throw new Error("Bepul servis rasm bermadi (" + r.status + (r.status === 401 || r.status === 403 ? ", kalit talab qilinadi" : "") + ")");
+  let r, ct = "";
+  for (let attempt = 0; attempt < 3; attempt++) {   // 402/429/5xx: servis band yoki limitga yetgan, biroz kutib qayta uramiz
+    const ac = new AbortController(), to = setTimeout(() => ac.abort(), 90000);
+    try { r = await fetch(u, { signal: ac.signal }); }
+    catch (e) { throw new Error(e.name === "AbortError" ? "Bepul servis javob bermadi (vaqt tugadi)" : "Bepul servisga ulanib bo'lmadi"); }
+    finally { clearTimeout(to); }
+    ct = r.headers.get("content-type") || "";
+    if (r.ok && /^image\//.test(ct)) break;
+    if (![402, 429, 500, 502, 503, 504].includes(r.status) || attempt === 2) break;
+    toast("Bepul servis band (" + r.status + "). Qayta urinilmoqda…");
+    await new Promise(res => setTimeout(res, 7000 * (attempt + 1)));
+  }
+  if (!r.ok || !/^image\//.test(ct)) throw new Error("Bepul servis rasm bermadi (" + r.status + (r.status === 402 || r.status === 429 ? ": limitga yetgan, bir ozdan keyin urining" : r.status === 401 || r.status === 403 ? ": kalit talab qilinadi" : "") + ")");
   return { ...(await blobToJpeg(await r.blob(), 1024)), provider: "pollinations" };
 }
 async function makeImage(prompt, size) { return cfg.oakey ? genOpenAI(prompt, size) : genFree(prompt, size); }
@@ -1712,6 +1718,12 @@ function renderStage() {
   const st = $("#stage"); st.hidden = !state.att.length;
   st.innerHTML = state.att.map((a, i) => '<div class="st">' + (a.mime === "image/jpeg" ? '<img src="' + esc(a.src) + '" alt="">' : "<span>" + esc(a.name) + "</span>") + '<button type="button" data-rm="' + i + '" aria-label="Olib tashlash">\u00d7</button></div>').join("");
 }
+function cleanLeak(t) {   // model ba'zan o'z "fikrlash qoralamasi"ni matnga chiqarib yuboradi: faqat oxirgi tayyor javobni olamiz
+  if (!/(Draft \d|User's input|\(Mental\)|No tool calls\?|Constraint)/i.test(t)) return t;
+  const m = [...t.matchAll(/(?:Yes|No)\.(?=[^\s\d*\-])/g)].pop();
+  const tail = m ? t.slice(m.index + m[0].length).trim() : "";
+  return tail.length > 20 ? tail : "";
+}
 const attSrc = a => a.src || (a.path && state.attCache.get(a.path)) || "";
 const attB64 = a => { const u = attSrc(a); return u.slice(u.indexOf(",") + 1); };
 async function prepAtt(chat, upto) {   // oxirgi 2 ta biriktirmali xabarning repo'dagi fayllarini oldindan yuklab olamiz
@@ -1722,12 +1734,13 @@ async function prepAtt(chat, upto) {   // oxirgi 2 ta biriktirmali xabarning rep
 }
 async function captionImage(src, prompt) {
   try {
+    const ac = new AbortController(); setTimeout(() => ac.abort(), 45000);
     const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(cfg.model) + ":generateContent", {
-      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.gkey },
+      method: "POST", signal: ac.signal, headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.gkey },
       body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Bu rasm sun'iy intellekt orqali quyidagi tavsif bo'yicha yaratildi: \"" + prompt + "\". Rasmda ANIQ ko'ringan narsani o'zbekcha 2-3 jumlada tasvirlang. Tavsifdagi qaysi talablar bajarilmaganini ham ayting (agar bo'lsa). Ko'rinmagan narsani ko'rinadi demang. Maqtov va ortiqcha so'z yozmang." }, { inlineData: { mimeType: "image/jpeg", data: attB64({ src }) } }] }] }) });
     if (!r.ok) return "";
     const j = await r.json(), c = j.candidates && j.candidates[0];
-    return ((c && c.content && c.content.parts) || []).map(p => p.text || "").join("").trim();
+    return cleanLeak(((c && c.content && c.content.parts) || []).map(p => p.text || "").join("").trim());
   } catch (e) { return ""; }
 }
 
@@ -1850,7 +1863,7 @@ async function gemini(chat, upto) {
           body: JSON.stringify({ contents: contents.concat([{ role: "model", parts: [{ text: "[Foydalanuvchiga ko'rsatildi]\n" + what }] }, { role: "user", parts: [{ text: "Endi ko'rsatilgan narsa haqida foydalanuvchi tilida 2-4 jumlalik qisqa izoh yozing: nima ko'rsatildi va eng muhim xulosa. Savolda so'ralgan narsalarga (masalan, cho'qqi, ildiz) javob bering. Ko'rsatilgan narsani qaytarib sanab chiqmang, asbob chaqirmang." }] }])})
         });
         const j2 = await r2.json().catch(() => ({}));
-        if (r2.ok) text = ((((j2.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || "").join("").trim();
+        if (r2.ok) text = cleanLeak(((((j2.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || "").join("").trim());
       } catch (e) { /* qayta urinadi */ }
     }
     if (!text.trim()) text = "Yuqorida: " + [...visuals.map(v => v.title), ...files.map(f => f.name)].join(", ") + ".";
@@ -2221,7 +2234,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-06.34";
+const BUILD = "2026-11-06.35";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-oakey").value = cfg.oakey; $("#s-oamodel").value = cfg.oamodel; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
