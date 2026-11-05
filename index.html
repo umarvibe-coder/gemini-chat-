@@ -1394,7 +1394,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.14";
+const BUILD = "2026-11-05.15";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
@@ -1519,7 +1519,30 @@ async function tick() {
 setInterval(tick, 6000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
 
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").then(r => r.update()).catch(() => {});
+/* ---------- avtomatik yangilanish: GitHub'da yangi versiya bo'lsa, ilova o'zi yuklaydi ---------- */
+let updating = false;
+async function checkUpdate(fromOpen) {
+  if (updating || !navigator.onLine) return;
+  try {
+    const r = await fetch("index.html?_=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) return;
+    const m = /const BUILD = "([^"]+)"/.exec(await r.text());
+    if (!m || m[1] === BUILD) return;
+    let tried = ""; try { tried = sessionStorage.getItem("updTried") || ""; } catch (e) {}
+    if (tried === m[1]) return;                                   // bir versiya uchun faqat bir marta urinamiz (aylanib qolmasin)
+    const typing = ($("#input") && $("#input").value.trim()) || state.busy || state.editing;
+    if (typing && !fromOpen) { toast("Yangi versiya bor. Sahifani yangilang", "ok"); return; }
+    updating = true;
+    try { sessionStorage.setItem("updTried", m[1]); } catch (e) {}
+    toast("Yangi versiya yuklanmoqda…");
+    try { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } catch (e) {}
+    try { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(g => g.update())); } catch (e) {}
+    location.reload();
+  } catch (e) {}
+}
+checkUpdate(true);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkUpdate(false); });
 
 /* ---------- boshlash ---------- */
 render(); autosize();
