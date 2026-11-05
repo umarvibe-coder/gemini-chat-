@@ -248,7 +248,7 @@ footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
 #input:focus-visible { outline: none; }
 #input::placeholder { color: var(--muted); }
 .bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; }
-.chip { min-width: 0; max-width: calc(100% - 60px); border: 1px solid var(--line); background: var(--bg); border-radius: 99px; padding: 7px 10px 7px 11px;
+.chip { min-width: 0; max-width: calc(100% - 110px); border: 1px solid var(--line); background: var(--bg); border-radius: 99px; padding: 7px 10px 7px 11px;
   font: 700 13px var(--sans); color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
 .chip:hover { background: var(--accent-soft); color: var(--ink); }
 .chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -264,6 +264,15 @@ footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
 .cmdbar button { flex: none; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 99px; padding: 6px 11px; font-size: 14px; white-space: nowrap; }
 .cmdbar button b { color: var(--accent); font-weight: 600; margin-right: 5px; }
 .cmdbar button:hover { background: var(--accent-soft); }
+.attach { margin-left: auto; width: 40px; height: 40px; flex: none; }
+.stage { display: flex; gap: 8px; overflow-x: auto; padding: 8px 8px 0; }
+.stage .st { position: relative; flex: none; height: 64px; min-width: 64px; max-width: 160px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: 12px; color: var(--muted); padding: 0 8px; }
+.stage .st img { height: 100%; width: auto; display: block; }
+.stage .st span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; }
+.stage .st button { position: absolute; top: 2px; right: 2px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 14px; line-height: 1; }
+.atts { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 2px; }
+.atts img { max-height: 200px; max-width: 100%; border-radius: 12px; display: block; }
+.atts .af { border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font-size: 13px; color: var(--muted); }
 .genimg { display: block; width: 100%; height: auto; border-radius: 12px; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 104px);
   max-width: min(92vw, 520px); background: var(--ink); color: var(--bg); padding: 11px 15px; border-radius: 14px;
@@ -342,9 +351,12 @@ footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
 <footer class="composer"><div class="wrap">
   <div class="box">
     <div class="cmdbar" id="cmdbar" hidden></div>
+    <div class="stage" id="stage" hidden></div>
     <textarea id="input" rows="1" placeholder="Gemini'ga yozing…" aria-label="Xabar"></textarea>
     <div class="bar">
       <button class="chip" id="modelChip" data-ic="sparkle" aria-label="Modelni tanlash"><span id="modelName">tanlanmagan</span><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button class="ibtn attach" id="attach" data-ic="clip" aria-label="Rasm yoki fayl biriktirish" title="Rasm yoki fayl biriktirish"></button>
+      <input type="file" id="fileIn" multiple accept="image/*,application/pdf,text/*,.txt,.md,.csv,.json" hidden>
       <button class="send" id="send" data-ic="send" aria-label="Yuborish" title="Yuborish"></button>
     </div>
   </div>
@@ -439,6 +451,7 @@ const ICONS = {
   sync: '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>',
   settings: '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  clip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
   send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
   copy: '<rect width="14" height="14" x="8" y="8" rx="2.5"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
@@ -706,6 +719,8 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
    - "Rasm yarat", "rasm chiz", "foto", "realistik", "illyustratsiya", "tasavvur qil" kabi so'rovlarda (olma, manzara, hayvon, mahsulot, plakat): draw_image. show_svg ni faqat tuzilma sxemasi (qismlari belgilanadigan chizma), show_steps ni jarayon bosqichlari, show_chart ni raqamlar uchun ishlating.
    - draw_image dan keyin izoh 2-3 jumla bo'lsin: rasmda nima ko'rsatilgani. Uzun maqola yozmang.
    - prompt inglizcha, 30-70 so'z, tartib: ob'ekt va tafsilotlar, fon, uslub, kadr, yorug'lik, ranglar, sifat (masalan: "a ripe red apple with water droplets on a rustic wooden table, blurred kitchen background, realistic macro photo, close-up, soft morning window light, warm tones, highly detailed, sharp focus"). Rasmga yozuv qo'shishni so'ramang. Foydalanuvchi so'zi qisqa bo'lsa ham tavsifni o'zingiz boyiting. Bir javobda bittadan ortiq chaqirmang.
+   - Siz yaratilgan rasmni o'zingiz ko'rmaysiz: izohda "ko'rinadi/tasvirlangan" deb da'vo qilmang, faqat nima so'ralganini ayting. (Sahifa rasmni alohida tekshirib, haqiqiy izoh qo'yishi mumkin.)
+   - Foydalanuvchi rasm, PDF yoki matn fayl biriktirishi mumkin: ularni o'zingiz o'qib, mazmuniga qarab javob bering.
    - Foydalanuvchi xabari /asbob_nomi bilan boshlansa (masalan /draw_image), "[Foydalanuvchi aynan ... asbobini ishlatishni so'radi]" belgisi qo'shiladi: aynan shu asbobni chaqiring.
    - Rasm yaratilmasa (xato qaytsa), buni foydalanuvchiga rostgo'ylik bilan ayting va SVG bilan o'zingiz chizishni taklif qiling.
 Tarixda \u27e6...\u27e7 ichidagi yozuvlar faqat sahifaning eslatmasi (oldin qanday vizual ko'rsatilgani). Ularni HECH QACHON o'zingiz yozmang: grafik, rasm yoki diagramma kerak bo'lsa, tegishli asbobni chaqiring, matnga belgi yozish vizual chiqarmaydi.
@@ -1641,14 +1656,63 @@ async function fileBytes(f) { await loadDocGen(); return DocGen.build(f.format, 
 const fmtSize = n => n < 1024 ? n + " B" : (n / 1024).toFixed(1) + " KB";
 function buildContents(chat, upto) {
   const msgs = chat.messages.slice(0, upto + 1);
+  let recentAtt = msgs.length, cnt = 0; for (let k = msgs.length - 1; k >= 0 && cnt < 2; k--) if (msgs[k].attachments && msgs[k].attachments.length) { recentAtt = k; cnt++; }
   let last = -1; msgs.forEach((m, i) => { if ((m.files && m.files.length) || (m.visuals && m.visuals.length)) last = i; });
   return msgs.map((m, i) => {
     let t = m.role === "user" ? cmdText(m.text || "") : (m.text || "");
     (m.visuals || []).forEach(v => { t += "\n\u27e6sahifa ko'rsatgan vizual: " + (v.kind === "chart" ? "Grafik" : v.kind === "svg" ? "Rasm (SVG)" : v.kind === "photo" ? "Internetdan rasm" : v.kind === "steps" ? "Bosqichli rasmlar" : v.kind === "graph" ? "Funksiya grafigi" : v.kind === "image" ? "AI yaratgan rasm" : "Diagramma") + " \u2014 " + v.title + "\u27e7" + (i === last ? "\n" + (v.kind === "chart" ? JSON.stringify({ type: v.type, labels: v.labels, series: v.series }) : v.kind === "steps" ? JSON.stringify(v.steps.map(x => ({ title: x.title, text: x.text }))) : v.kind === "graph" ? JSON.stringify({ funksiyalar: v.exprs, xmin: v.xmin, xmax: v.xmax }) : v.kind === "image" ? "prompt: " + v.prompt : v.code) : ""); });
     (m.files || []).forEach(f => { t += "\n\u27e6sahifa yaratgan fayl: " + f.name + ", " + f.content.length + " belgi\u27e7" + (i === last ? "\n```\n" + f.content + "\n```" : ""); });
-    return { role: m.role === "user" ? "user" : "model", parts: [{ text: t }] };
+    const parts = [];
+    if (m.role === "user" && m.attachments && m.attachments.length) {
+      const recent = i >= recentAtt;
+      if (!t.trim()) t = "Biriktirilgan faylni ko'rib chiqing.";
+      m.attachments.forEach(a => {
+        if (!recent) t += "\n\u27e6biriktirilgan fayl (endi ko'rinmaydi): " + a.name + "\u27e7";
+        else if (a.text != null) t += "\n\n--- fayl: " + a.name + " ---\n" + a.text;
+        else parts.push({ inlineData: { mimeType: a.mime, data: attB64(a) } });
+      });
+    }
+    parts.unshift({ text: t });
+    return { role: m.role === "user" ? "user" : "model", parts };
   }).filter(c => c.parts[0].text.trim());
 }
+/* ---------- biriktirilgan rasm va fayllar ---------- */
+state.att = [];
+const AT_MAX = 4, AT_PDF = 3 * 1024 * 1024, AT_TXT = 120000;
+const readData = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error("Faylni o'qib bo'lmadi")); r.readAsDataURL(f); });
+const readText = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error("Faylni o'qib bo'lmadi")); r.readAsText(f); });
+async function addFiles(list) {
+  for (const f of Array.from(list)) {
+    if (state.att.length >= AT_MAX) { toast("Bir xabarga ko'pi bilan " + AT_MAX + " ta fayl", "err"); break; }
+    try {
+      if (/^image\//.test(f.type)) { const im = await blobToJpeg(f, 1280); state.att.push({ name: f.name || "rasm.jpg", mime: "image/jpeg", src: im.src }); }
+      else if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) {
+        if (f.size > AT_PDF) { toast(f.name + ": PDF 3 MB dan katta", "err"); continue; }
+        state.att.push({ name: f.name, mime: "application/pdf", src: await readData(f) });
+      } else if (/^text\//.test(f.type) || /\.(txt|md|csv|json)$/i.test(f.name)) {
+        const t = await readText(f); state.att.push({ name: f.name, mime: "text/plain", text: t.slice(0, AT_TXT) });
+        if (t.length > AT_TXT) toast(f.name + ": faqat birinchi " + AT_TXT + " belgi olindi");
+      } else toast(f.name + ": bu turdagi fayl qo'llab-quvvatlanmaydi (rasm, PDF, matn)", "err");
+    } catch (e) { toast((f.name || "Fayl") + ": " + (e.message || e), "err"); }
+  }
+  renderStage();
+}
+function renderStage() {
+  const st = $("#stage"); st.hidden = !state.att.length;
+  st.innerHTML = state.att.map((a, i) => '<div class="st">' + (a.mime === "image/jpeg" ? '<img src="' + esc(a.src) + '" alt="">' : "<span>" + esc(a.name) + "</span>") + '<button type="button" data-rm="' + i + '" aria-label="Olib tashlash">\u00d7</button></div>').join("");
+}
+const attB64 = a => a.src.slice(a.src.indexOf(",") + 1);
+async function captionImage(src, prompt) {
+  try {
+    const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(cfg.model) + ":generateContent", {
+      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.gkey },
+      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Bu rasm sun'iy intellekt orqali quyidagi tavsif bo'yicha yaratildi: \"" + prompt + "\". Rasmda ANIQ ko'ringan narsani o'zbekcha 2-3 jumlada tasvirlang. Tavsifdagi qaysi talablar bajarilmaganini ham ayting (agar bo'lsa). Ko'rinmagan narsani ko'rinadi demang. Maqtov va ortiqcha so'z yozmang." }, { inlineData: { mimeType: "image/jpeg", data: attB64({ src }) } }] }] }) });
+    if (!r.ok) return "";
+    const j = await r.json(), c = j.candidates && j.candidates[0];
+    return ((c && c.content && c.content.parts) || []).map(p => p.text || "").join("").trim();
+  } catch (e) { return ""; }
+}
+
 /* ---------- /buyruqlar: foydalanuvchi asbobni aniq tanlaydi (xuddi skill chaqirgandek) ---------- */
 const CMDS = [
   { n: "draw_image", a: ["rasm", "draw"], h: "AI rasm yaratish" },
@@ -1736,7 +1800,8 @@ async function gemini(chat, upto) {
   { const dp = parts.find(p => p.functionCall && p.functionCall.name === "draw_image" && p.functionCall.args && String(p.functionCall.args.prompt || "").trim());
     if (dp) {
       const a = dp.functionCall.args, pr = String(a.prompt).slice(0, 900), sz = ["square", "landscape", "portrait"].includes(a.size) ? a.size : "square";
-      try { const im = await makeImage(pr, sz); visuals.push({ kind: "image", title: String(a.title || "Rasm").slice(0, 120), prompt: pr, src: im.src, w: im.w, h: im.h, provider: im.provider }); }
+      try { const im = await makeImage(pr, sz); visuals.push({ kind: "image", title: String(a.title || "Rasm").slice(0, 120), prompt: pr, src: im.src, w: im.w, h: im.h, provider: im.provider });
+        const cap = await captionImage(im.src, pr); if (cap) text = cap; }
       catch (e) { text += (text ? "\n\n" : "") + "(Rasm yaratib bo'lmadi: " + (e.message || e) + ")"; }
     } }
   if (visuals.length) text = text.replace(/^[ \t]*\{\s*"(?:expr|title|labels|series|query|op|steps)"[^\n]*\}[ \t]*$/gm, "").replace(/\n{3,}/g, "\n\n").trim();   // model asbob argumentini matnga yozib qo'ysa
@@ -1821,7 +1886,7 @@ async function runPendings() {
 }
 async function send() {
   const ta = $("#input"); const text = ta.value.trim();
-  if (!text) return;
+  if (!text && !state.att.length) return;
   if (!canRead()) { openSettings(); return; }
   if (!canGen()) { toast("Avval Gemini key va modelni sozlang", "err"); openSettings(); return; }
   await withBusy(async () => {
@@ -1829,9 +1894,12 @@ async function send() {
     if (!id) id = await createChat();
     const mid = uid();
     await mutate(id, c => {
-      c.messages.push({ id: mid, role: "user", by: "me", text, ts: Date.now(), pending: true });
-      if (!c.title || c.title === "Yangi chat") c.title = text.replace(/\s+/g, " ").slice(0, 40);
+      const msg = { id: mid, role: "user", by: "me", text, ts: Date.now(), pending: true };
+      if (state.att.length) msg.attachments = state.att.map(a => ({ ...a }));
+      c.messages.push(msg);
+      if (!c.title || c.title === "Yangi chat") c.title = (text || (state.att[0] && state.att[0].name) || "Fayl").replace(/\s+/g, " ").slice(0, 40);
     });
+    state.att = []; renderStage();
     ta.value = ""; autosize(); cmdBar(); render(); scrollEnd();
     await answerOne(id, mid);
   });
@@ -1918,9 +1986,11 @@ function msgHtml(m) {
       '<button class="ab" data-act="fsave" title="Repo\'ga saqlash" aria-label="Repo\'ga saqlash">' + ic("upload") + '</button></div>' +
       '<div class="fhint">Ochish uchun bosing</div></div>').join("") + "</div>";
   }
+  let ah = "";
+  if (m.attachments && m.attachments.length) ah = '<div class="atts">' + m.attachments.map(a => a.mime === "image/jpeg" && a.src ? '<img src="' + esc(a.src) + '" alt="' + esc(a.name) + '">' : '<div class="af">' + esc(a.name) + "</div>").join("") + "</div>";
   return '<article class="msg ' + (isU ? "user" : "model") + '" data-id="' + esc(m.id) + '">' +
     '<div class="meta">' + av + '<span class="who">' + who + "</span><span>" + esc(sub) + "</span>" + tags + "</div>" +
-    body + fh + visualHtml(m) + prev + '<div class="acts">' + acts + "</div></article>";
+    body + ah + fh + visualHtml(m) + prev + '<div class="acts">' + acts + "</div></article>";
 }
 const hero = (icon, title, text, extra) => '<div class="hero"><span class="tile big gem">' + ic(icon) + "</span><h2>" + title + "</h2><p>" + text + "</p>" + (extra || "") + "</div>";
 function renderMsgs() {
@@ -2064,6 +2134,9 @@ $("#msgs").addEventListener("click", async ev => {
 }
 $("#send").addEventListener("click", send);
 $("#input").addEventListener("input", () => { autosize(); cmdBar(); });
+$("#attach").addEventListener("click", () => $("#fileIn").click());
+$("#fileIn").addEventListener("change", async e => { const fl = Array.from(e.target.files || []); e.target.value = ""; if (fl.length) await addFiles(fl); });
+$("#stage").addEventListener("click", e => { const b = e.target.closest("[data-rm]"); if (!b) return; state.att.splice(+b.dataset.rm, 1); renderStage(); });
 $("#cmdbar").addEventListener("click", e => { const b = e.target.closest("[data-cmd]"); if (!b) return; const ta = $("#input"); ta.value = "/" + b.dataset.cmd + " "; $("#cmdbar").hidden = true; autosize(); ta.focus(); });
 $("#input").addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
 $("#btnSync").addEventListener("click", syncNow);
@@ -2104,7 +2177,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.31";
+const BUILD = "2026-11-05.32";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-oakey").value = cfg.oakey; $("#s-oamodel").value = cfg.oamodel; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
