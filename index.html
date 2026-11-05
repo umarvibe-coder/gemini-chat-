@@ -644,7 +644,7 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
    - Matematik tushuntirishda ham shu asbob: grafik chiqadi, matnda esa tushuntiring (cho'qqi, ildiz, davr va h.k.).
 7) show_steps (bosqichma-bosqich rasmlar): "qanday qilinadi", "qanday kesiladi/tikiladi/yig'iladi", amaliy ko'nikma, tajriba, retsept, mashq.
    - 3-5 ta bosqich: har biriga alohida kichik rasm (SVG, viewBox 0 0 800 400), qisqa sarlavha va 1-2 jumlalik matn.
-   - Hamma rasm bir xil uslubda, bir xil rang va o'lchamda bo'lsin; har rasmda FAQAT shu bosqich lahzasi ko'rinsin. Rasm ichida yozuv yozmang (faqat strelka va shakllar), matn alohida maydonda.
+   - Hamma rasm bir xil uslubda, bir xil rang va o'lchamda bo'lsin; har rasmda FAQAT shu bosqich lahzasi ko'rinsin. Rasm ichida yozuv, raqam va belgi (1, 2, 3) yozmang: faqat shakllar va strelka; raqam va matnni sahifa o'zi qo'yadi. Bosqich sarlavhasiga ham raqam yozmang.
    - Tilsiz, o'zgarmas ob'ektlarni (masalan, taxta va go'sht, qo'l va pichoq) har rasmda bir joyda chizing, faqat harakat o'zgarsin. Strelka bilan harakat yo'nalishini ko'rsating.
    - Jarayon sxemasi (qaror, tarmoq) uchun show_diagram, bosqichma-bosqich jismoniy harakat uchun show_steps.
 Asbob chaqirgandan keyin chatga qisqa izoh yozing: nima ko'rsatildi va eng muhim xulosa nima (2-4 jumla). Izohsiz qoldirmang.
@@ -932,7 +932,7 @@ function parseVisuals(parts) {
         out.push(vis); }
     if (fc.name === "plot_function" && a.expr) { const ch = funcChart(a); if (ch) out.push(ch); }
     if (fc.name === "show_steps" && Array.isArray(a.steps)) {
-      const steps = a.steps.slice(0, 6).filter(s => s && typeof s.svg === "string" && s.svg.trim()).map(s => ({ title: String(s.title || "").slice(0, 60), text: String(s.text || "").slice(0, 240), code: s.svg.replace(/^```(?:svg|xml)?\s*|```\s*$/g, "").trim() }));
+      const steps = a.steps.slice(0, 6).filter(s => s && typeof s.svg === "string" && s.svg.trim()).map(s => ({ title: String(s.title || "").replace(/^\s*(\d+|qadam|bosqich)\s*[.):-]+\s*/i, "").slice(0, 60), text: String(s.text || "").slice(0, 240), code: s.svg.replace(/^```(?:svg|xml)?\s*|```\s*$/g, "").trim() }));
       if (steps.length >= 2) out.push({ kind: "steps", title: String(a.title || "Bosqichlar").slice(0, 120), steps });
     }
     if (fc.name === "show_chart" && Array.isArray(a.labels) && Array.isArray(a.series)) {
@@ -1421,14 +1421,17 @@ async function gemini(chat, upto) {
       : v.kind === "steps" ? "Bosqichli rasmlar: " + v.title + " | " + v.steps.map((s, i) => (i + 1) + ") " + s.title + ": " + s.text).join(" ")
       : v.kind === "svg" ? "Rasm: " + v.title + (v.parts ? " | qismlar: " + v.parts.map(p => p.name + " (" + p.text + ")").join("; ") : "")
       : v.kind === "photo" ? "Internetdan topilgan rasmlar (foydalanuvchi tanlaydi): " + v.title : "Diagramma: " + v.title + "\n" + v.code).concat(files.map(f => "Fayl: " + f.name)).join("\n");
-    try {
-      const r2 = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(cfg.model) + ":generateContent", {
-        method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.gkey },
-        body: JSON.stringify({ contents: contents.concat([{ role: "model", parts: [{ text: "[Foydalanuvchiga ko'rsatildi]\n" + what }] }, { role: "user", parts: [{ text: "Endi ko'rsatilgan narsa haqida foydalanuvchi tilida 2-4 jumlalik qisqa izoh yozing: nima ko'rsatildi va eng muhim xulosa. Ko'rsatilgan narsani qaytarib sanab chiqmang, asbob chaqirmang." }] }]) })
-      });
-      const j2 = await r2.json().catch(() => ({}));
-      if (r2.ok) text = (((j2.candidates || [])[0] || {}).content || {}).parts ? j2.candidates[0].content.parts.map(p => p.text || "").join("").trim() : "";
-    } catch (e) { /* izohsiz qoladi */ }
+    for (let t = 0; t < 2 && !text.trim(); t++) {
+      try {
+        const r2 = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(cfg.model) + ":generateContent", {
+          method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.gkey },
+          body: JSON.stringify({ contents: contents.concat([{ role: "model", parts: [{ text: "[Foydalanuvchiga ko'rsatildi]\n" + what }] }, { role: "user", parts: [{ text: "Endi ko'rsatilgan narsa haqida foydalanuvchi tilida 2-4 jumlalik qisqa izoh yozing: nima ko'rsatildi va eng muhim xulosa. Savolda so'ralgan narsalarga (masalan, cho'qqi, ildiz) javob bering. Ko'rsatilgan narsani qaytarib sanab chiqmang, asbob chaqirmang." }] }]), generationConfig: { maxOutputTokens: 1200 } })
+        });
+        const j2 = await r2.json().catch(() => ({}));
+        if (r2.ok) text = ((((j2.candidates || [])[0] || {}).content || {}).parts || []).map(p => p.text || "").join("").trim();
+      } catch (e) { /* qayta urinadi */ }
+    }
+    if (!text.trim()) text = "Yuqorida: " + [...visuals.map(v => v.title), ...files.map(f => f.name)].join(", ") + ".";
   }
   if (!text && !files.length && !visuals.length) {
     const why = (c && c.finishReason) || (j.promptFeedback && j.promptFeedback.blockReason) || "";
@@ -1742,7 +1745,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.20";
+const BUILD = "2026-11-05.21";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
