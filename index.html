@@ -537,11 +537,11 @@ async function regenerate(id) {
     state.thinking = chat.id; render();
     const t0 = Date.now();
     const text = await gemini(chat, j);
-    const ms = Date.now() - t0;
+    const took = Date.now() - t0;
     await mutate(chat.id, c => {
       const m = c.messages.find(x => x.id === id); if (!m) return;
       (m.prev = m.prev || []).push(m.text);
-      m.text = text; m.model = cfg.model; m.ts = Date.now(); m.ms = ms; delete m.edited;
+      m.text = text; m.model = cfg.model; m.ts = Date.now(); m.ms = took; delete m.edited;
     });
   });
 }
