@@ -592,7 +592,7 @@ function parseVisuals(parts) {
       out.push({ kind: "diagram", title: String(a.title || "Diagramma").slice(0, 120), code: a.code.replace(/^```(?:mermaid)?\s*|```\s*$/g, "").trim() });
     if (fc.name === "show_chart" && Array.isArray(a.labels) && Array.isArray(a.series)) {
       const labels = a.labels.slice(0, 40).map(x => String(x));
-      const series = a.series.slice(0, 6).map(s => ({ name: String((s && s.name) || ""), values: labels.map((_, i) => { const n = Number(s && s.values && s.values[i]); return Number.isFinite(n) ? n : 0; }) }));
+      const series = a.series.slice(0, 10).map(s => ({ name: String((s && s.name) || ""), values: labels.map((_, i) => { const n = Number(s && s.values && s.values[i]); return Number.isFinite(n) ? n : 0; }) }));
       if (labels.length && series.length)
         out.push({ kind: "chart", title: String(a.title || "Grafik").slice(0, 120), type: ["bar", "line", "pie"].includes(a.type) ? a.type : "bar", labels, series, unit: a.unit ? String(a.unit).slice(0, 12) : "" });
     }
@@ -600,9 +600,18 @@ function parseVisuals(parts) {
   return out;
 }
 
+// 12 qo'lda tanlangan rang (qo'shni ranglar bir-biridan farq qiladi). 12 dan keyin rang tonlari avtomatik hosil qilinadi.
+const PAL_L = ["#2447c6", "#e0633a", "#0c9b84", "#8a5cf0", "#d9a21b", "#d6407f", "#0f8fe0", "#5aa126", "#5b6ee1", "#9a6b3c", "#0aa5b8", "#64748b"];
+const PAL_D = ["#7b95ff", "#ff9166", "#3fd0b4", "#b99cff", "#f0c14b", "#ff7aa8", "#38b6ff", "#98d65a", "#9aa7ff", "#d4a373", "#4fd6e6", "#94a3b8"];
+function colorAt(i) {
+  const P = isDark() ? PAL_D : PAL_L;
+  if (i < P.length) return P[i];
+  const k = i - P.length;   // oltin burchak: ketma-ket ranglar bir-biriga yaqin tushmaydi
+  return "hsl(" + Math.round((k * 137.508 + 20) % 360) + "," + (isDark() ? "62%,68%" : "58%,44%") + ")";
+}
 function themeColors() {
   const cs = getComputedStyle(document.documentElement), g = n => cs.getPropertyValue(n).trim();
-  return { ink: g("--ink"), muted: g("--muted"), line: g("--line"), surface: g("--surface"), pal: [1, 2, 3, 4, 5, 6].map(i => g("--c" + i)) };
+  return { ink: g("--ink"), muted: g("--muted"), line: g("--line"), surface: g("--surface"), col: colorAt };
 }
 const fmtN = n => { const a = Math.abs(n); return a >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M" : a >= 1e3 ? (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K" : String(Math.round(n * 100) / 100); };
 const clip = (s, n) => s.length > n ? s.slice(0, n - 1) + "…" : s;
@@ -622,7 +631,7 @@ function chartSvg(v) {
     else {
       let a0 = -Math.PI / 2;
       vals.forEach((x, i) => {
-        const col = T.pal[i % 6], frac = x / tot;
+        const col = T.col(i), frac = x / tot;
         if (frac >= 0.9999) body += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (R + r) / 2 + '" fill="none" stroke="' + col + '" stroke-width="' + (R - r) + '"/>';
         else if (frac > 0) {
           const a1 = a0 + frac * 2 * Math.PI, big = frac > 0.5 ? 1 : 0, P = (rr, a) => (cx + rr * Math.cos(a)).toFixed(2) + " " + (cy + rr * Math.sin(a)).toFixed(2);
@@ -635,7 +644,7 @@ function chartSvg(v) {
     }
     return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(v.title) + '">' + body + "</svg>";
   }
-  const ns = v.series.length, n = v.labels.length, L = 46, R = 12, Tp = 14, plotH = 180, legH = ns > 1 ? 24 : 0;
+  const ns = v.series.length, n = v.labels.length, L = 46, R = 12, Tp = 14, plotH = 180, perRow = 3, legRows = ns > 1 ? Math.ceil(ns / perRow) : 0, legH = legRows ? legRows * 18 + 8 : 0;
   const rot = n > 6, bot = rot ? 56 : 30;
   H = Tp + plotH + bot + legH;
   const all = v.series.flatMap(s => s.values), lo = Math.min(0, ...all), hi = Math.max(0, ...all);
@@ -650,7 +659,7 @@ function chartSvg(v) {
     body += rot ? t(x, Tp + plotH + 14, clip(lb, 10), { anchor: "end", rot: -40, size: 10 }) : t(x, Tp + plotH + 16, clip(lb, 10), { anchor: "middle", size: 10 }); });
   if (v.type === "line") {
     v.series.forEach((s, k) => {
-      const col = T.pal[k % 6], pts = s.values.map((val, i) => (L + gw * (i + 0.5)).toFixed(1) + "," + Y(val).toFixed(1));
+      const col = T.col(k), pts = s.values.map((val, i) => (L + gw * (i + 0.5)).toFixed(1) + "," + Y(val).toFixed(1));
       body += '<polyline points="' + pts.join(" ") + '" fill="none" stroke="' + col + '" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>';
       s.values.forEach((val, i) => { const x = L + gw * (i + 0.5), y = Y(val);
         body += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="3.2" fill="' + T.surface + '" stroke="' + col + '" stroke-width="2"/>';
@@ -660,11 +669,11 @@ function chartSvg(v) {
     const bw = Math.min(30, gw * 0.8 / ns);
     v.series.forEach((s, k) => s.values.forEach((val, i) => {
       const x = L + gw * (i + 0.5) - bw * ns / 2 + bw * k, ya = Y(0), yb = Y(val), top = Math.min(ya, yb), h = Math.max(Math.abs(ya - yb), 1);
-      body += '<rect x="' + x.toFixed(1) + '" y="' + top.toFixed(1) + '" width="' + (bw - 2).toFixed(1) + '" height="' + h.toFixed(1) + '" rx="4" fill="' + T.pal[k % 6] + '"/>';
+      body += '<rect x="' + x.toFixed(1) + '" y="' + top.toFixed(1) + '" width="' + (bw - 2).toFixed(1) + '" height="' + h.toFixed(1) + '" rx="4" fill="' + T.col(k) + '"/>';
       if (ns === 1 && n <= 10) body += t(x + (bw - 2) / 2, top - 4, fmtN(val), { anchor: "middle", size: 10, fill: T.ink });
     }));
   }
-  if (legH) v.series.forEach((s, k) => { const x = L + k * 92; body += '<rect x="' + x + '" y="' + (H - 16) + '" width="10" height="10" rx="3" fill="' + T.pal[k % 6] + '"/>' + t(x + 15, H - 7, clip(s.name, 11), { size: 10.5, fill: T.ink }); });
+  if (legH) v.series.forEach((s, k) => { const x = L + (k % perRow) * 100, yy = H - legH + 8 + Math.floor(k / perRow) * 18; body += '<rect x="' + x + '" y="' + yy + '" width="10" height="10" rx="3" fill="' + T.col(k) + '"/>' + t(x + 15, yy + 9, clip(s.name, 12), { size: 10.5, fill: T.ink }); });
   if (unit) body += t(W - R, 9, unit.trim(), { anchor: "end", size: 10 });
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(v.title) + '">' + body + "</svg>";
 }
@@ -1143,7 +1152,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.8";
+const BUILD = "2026-11-05.9";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
