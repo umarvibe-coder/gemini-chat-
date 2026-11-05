@@ -495,12 +495,14 @@ async function answerOne(chatId, msgId) {
   const idx = e.chat.messages.findIndex(m => m.id === msgId);
   if (idx < 0) return;
   state.thinking = chatId; render();
+  const t0 = Date.now();
   const text = await gemini(e.chat, idx);
+  const ms = Date.now() - t0;
   await mutate(chatId, c => {
     const i = c.messages.findIndex(m => m.id === msgId);
     if (i < 0) return;
     delete c.messages[i].pending;
-    c.messages.splice(i + 1, 0, { id: uid(), role: "model", by: "gemini", model: cfg.model, text, ts: Date.now() });
+    c.messages.splice(i + 1, 0, { id: uid(), role: "model", by: "gemini", model: cfg.model, text, ts: Date.now(), ms });
   });
   state.thinking = null; render(); scrollEnd();
 }
@@ -533,11 +535,13 @@ async function regenerate(id) {
     let j = i - 1; while (j >= 0 && ms[j].role !== "user") j--;
     if (j < 0) throw new Error("Bu javobning savoli topilmadi");
     state.thinking = chat.id; render();
+    const t0 = Date.now();
     const text = await gemini(chat, j);
+    const ms = Date.now() - t0;
     await mutate(chat.id, c => {
       const m = c.messages.find(x => x.id === id); if (!m) return;
       (m.prev = m.prev || []).push(m.text);
-      m.text = text; m.model = cfg.model; m.ts = Date.now(); delete m.edited;
+      m.text = text; m.model = cfg.model; m.ts = Date.now(); m.ms = ms; delete m.edited;
     });
   });
 }
@@ -568,7 +572,7 @@ function msgHtml(m) {
   const claude = m.by === "claude";
   const who = isU ? (claude ? "Claude" : "Men") : "Gemini";
   const av = '<span class="tile sm ' + (isU ? (claude ? "cl" : "me") : "gem") + '">' + ic(isU ? (claude ? "asterisk" : "user") : "sparkle") + "</span>";
-  const sub = [m.model, m.ts ? fmt(m.ts) : ""].filter(Boolean).join(" · ");
+  const sub = [m.model, m.ts ? fmt(m.ts) : "", m.ms ? (m.ms / 1000).toFixed(1) + " s" : ""].filter(Boolean).join(" · ");
   let tags = "";
   if (m.edited) tags += '<span class="tag">tahrirlangan</span>';
   if (m.pending) tags += '<span class="tag wait">javob kutmoqda</span>';
