@@ -670,10 +670,12 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
 6) plot_function (funksiya grafigi): y = f(x) ko'rinishidagi funksiya: parabola, to'g'ri chiziq, sin, cos, tan, logarifm, ildiz, daraja, ko'rsatkichli funksiya.
    - Faqat formulani yozing (expr), masalan: x^2-4*x+3, sin(x), ln(x), 2^x. Nuqtalarni sahifa o'zi hisoblaydi, shuning uchun sonlarni o'zingiz yozmang.
    - Funksiya grafigini HECH QACHON show_svg yoki show_chart bilan qo'lda chizmang. xmin va xmax ni mavzuga mos tanlang (sin va cos uchun -7 dan 7 gacha, ln uchun 0.1 dan 10 gacha).
+   - Ikki yoki uch funksiyani solishtirish kerak bo'lsa (masalan, ln(x) va sqrt(x)), bitta grafikda expr, expr2, expr3 bering. show_chart ning notekis x qiymatlari bilan funksiyani chizmang.
    - Matematik tushuntirishda ham shu asbob: grafik chiqadi, matnda esa tushuntiring (cho'qqi, ildiz, davr va h.k.).
 7) show_steps (bosqichma-bosqich rasmlar): "qanday qilinadi", "qanday kesiladi/tikiladi/yig'iladi", amaliy ko'nikma, tajriba, retsept, mashq.
    - 3-5 ta bosqich: har biriga alohida kichik rasm (SVG, viewBox 0 0 800 400), qisqa sarlavha va 1-2 jumlalik matn.
    - Hamma rasm bir xil uslubda, bir xil rang va o'lchamda bo'lsin; har rasmda FAQAT shu bosqich lahzasi ko'rinsin. Rasm ichida yozuv, raqam va belgi (1, 2, 3) yozmang: faqat shakllar va strelka; raqam va matnni sahifa o'zi qo'yadi. Bosqich sarlavhasiga ham raqam yozmang.
+   - Jarayonning HAMMA muhim harakatini qamrab oling: bosqichlarni o'tkazib yubormang (masalan, galstukda ikkinchi o'rash ham bor). Harakat qaysi qismga nisbatan bo'lishini strelka va rang bilan aniq ko'rsating.
    - Tilsiz, o'zgarmas ob'ektlarni (masalan, taxta va go'sht, qo'l va pichoq) har rasmda bir joyda chizing, faqat harakat o'zgarsin. Strelka bilan harakat yo'nalishini ko'rsating.
    - Jarayon sxemasi (qaror, tarmoq) uchun show_diagram, bosqichma-bosqich jismoniy harakat uchun show_steps.
 8) calc (hisob-kitob): ifoda qiymati, tenglama yechish, hosila, integral.
@@ -693,7 +695,7 @@ Signal -> vizual:
 - y = f(x) funksiya grafigi -> plot_function. Jismoniy harakat bosqichma-bosqich ("qanday kesiladi", "qanday bog'lanadi") -> show_steps.
 - Sanali reja, loyiha jadvali -> gantt. Tarixiy voqealar ketma-ketligi -> timeline.
 - Holatlar va o'tishlar -> stateDiagram-v2. Jadvallar o'rtasidagi aloqa -> erDiagram. Ikki mezon bo'yicha joylashtirish (muhim va shoshilinch) -> quadrantChart.
-Vizual KERAK EMAS: salomlashish, oddiy fakt yoki bitta son, fikr va maslahat, kod, tarjima, qisqa javob. Foydalanuvchi "faqat matn" desa ham.
+Vizual KERAK EMAS: salomlashish, oddiy fakt yoki bitta son, fikr va maslahat, hissiy yoki shaxsiy savol (kayfiyat, muammo, dardlashish: faqat samimiy matn, diagramma YO'Q), kod, tarjima, qisqa javob. Foydalanuvchi "faqat matn" desa ham.
 Kerak bo'lsa 2 tagacha vizual chiqaring (masalan, grafik va sxema). Ortiqcha vizual qo'shmang.
 Raqamlar: foydalanuvchi bergan yoki aniq bilgan sonlarni ishlating. Taxminiy bo'lsa sarlavhada "taxminan" deb yozing. Bilmasangiz o'ylab topmang: avval so'rang yoki matn bilan javob bering.
 Mermaid shablonlari (boshqa turlarni ham shu uslubda yozing, matnlarni oddiy qoldiring):
@@ -764,7 +766,9 @@ TOOLS[0].functionDeclarations.push({
     title: { type: "STRING", description: "Sarlavha, masalan: Parabola y = x^2 - 4x + 3" },
     expr: { type: "STRING", description: "Faqat o'zgaruvchi x li formula (y = siz yozmaysiz). Amallar: + - * / ^ ( ). Funksiyalar: sin cos tan asin acos atan sqrt abs ln log exp. Konstantalar: pi e. Masalan: x^2-4*x+3" },
     xmin: { type: "NUMBER", description: "X ning boshlanishi" },
-    xmax: { type: "NUMBER", description: "X ning oxiri" }
+    xmax: { type: "NUMBER", description: "X ning oxiri" },
+    expr2: { type: "STRING", description: "ixtiyoriy: ikkinchi funksiya (solishtirish uchun, shu grafikda)" },
+    expr3: { type: "STRING", description: "ixtiyoriy: uchinchi funksiya" }
   }, required: ["title", "expr", "xmin", "xmax"] }
 });
 TOOLS[0].functionDeclarations.push({
@@ -861,18 +865,19 @@ function compileExpr(src) {
   try { const f = new Function("x", "return (" + out + ");"); f(1); return f; } catch (e) { return null; }
 }
 function funcChart(a) {
-  const f = compileExpr(a.expr); if (!f) return null;
+  const exs = [a.expr, a.expr2, a.expr3].filter(e => e && String(e).trim()), fs = exs.map(compileExpr);
+  if (!fs.length || fs.some(f => !f)) return null;
   let x0 = Number(a.xmin), x1 = Number(a.xmax);
   if (!Number.isFinite(x0) || !Number.isFinite(x1) || x0 === x1) { x0 = -5; x1 = 5; }
   if (x0 > x1) [x0, x1] = [x1, x0];
-  const N = 24, labels = [], values = [];
+  const N = 24, labels = [], vals = fs.map(() => []);
   for (let i = 0; i <= N; i++) {
-    const x = x0 + (x1 - x0) * i / N, y = f(x);
-    if (!Number.isFinite(y) || Math.abs(y) > 1e7) continue;
-    labels.push(String(Math.round(x * 100) / 100)); values.push(Math.round(y * 1e4) / 1e4);
+    const x = x0 + (x1 - x0) * i / N, ys = fs.map(f => f(x));
+    if (ys.some(y => !Number.isFinite(y) || Math.abs(y) > 1e7)) continue;   // hamma funksiya aniqlangan nuqtalar qoladi
+    labels.push(String(Math.round(x * 100) / 100)); ys.forEach((y, k) => vals[k].push(Math.round(y * 1e4) / 1e4));
   }
   if (labels.length < 3) return null;
-  return { kind: "chart", title: String(a.title || "Funksiya grafigi").slice(0, 120), type: "line", labels, series: [{ name: "y = " + String(a.expr).replace(/^\s*y\s*=\s*/i, "").slice(0, 40), values }], unit: "", expr: String(a.expr).slice(0, 120) };
+  return { kind: "chart", title: String(a.title || "Funksiya grafigi").slice(0, 120), type: "line", labels, series: exs.map((e, k) => ({ name: "y = " + String(e).replace(/^\s*y\s*=\s*/i, "").slice(0, 40), values: vals[k] })), unit: "", expr: exs.map(e => String(e).slice(0, 120)).join(" ; ") };
 }
 /* bosqichli rasm: bitta bosqich (rasm + sarlavha + matn) */
 function stepSvg(v, k, uid) {
@@ -1864,7 +1869,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.23";
+const BUILD = "2026-11-05.24";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
