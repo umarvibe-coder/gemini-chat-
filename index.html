@@ -613,11 +613,11 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
    - Asosan flowchart TD yoki LR ishlating. Tugun identifikatorlari oddiy lotin harf/raqam (A, B, C1).
    - Tugun matni doim qo'shtirnoq ichida: A["Matn"]. Matn ichida qo'shtirnoq, qavs va ikki nuqta ishlatmang.
    - 15 tadan ortiq tugun qilmang. Faqat kod yozing, \`\`\` belgilarisiz.
-4) show_svg (rasm): shakl va joylashuvi muhim mavzularda: anatomiya (miya, yurak), qurilma tuzilishi, xarita, o'quv plakat, raqamlangan izohli rasm.
-   - Faqat SVG kodi: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600"> bilan boshlansin. Script, <style>, <image>, tashqi havola ishlatmang. Faqat rect, circle, ellipse, path, line, polygon, text, g, defs, linearGradient, clipPath. Matnda & o'rniga &amp; yozing.
-   - Tuzilishi: tepada sarlavha, o'rtada asosiy rasm (yumshoq ranglar, qora kontur stroke-width 3), qismlarida raqamli doira (oq doira, qora kontur, ichida qalin raqam), pastda yoki yonida har raqamga izoh qutisi (oq, rangli kontur, 14-15 px matn, bir qutiga 2-3 qisqa qator).
-   - Izoh qutilari rasmning ustiga tushmasin. Matn quti kengligidan uzun bo'lmasin: bir qatorga 28 belgidan oshirmang. Harf o'lchami kamida 13.
-   - Murakkab narsani sodda shakllar bilan ifodalang, aniq bilmagan tafsilotni chizmang.
+4) show_svg (rasm): shakl va joylashuvi muhim mavzularda: anatomiya (miya, yurak), qurilma tuzilishi, xarita, hujayra, o'quv rasm.
+   - svg maydoniga FAQAT rasmning o'zini yozing: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400"> bilan boshlansin. Sarlavha, raqam va izoh yozmang: ularni sahifa o'zi chizadi.
+   - Rasmni bir nechta shakldan yig'ing (path, ellipse, circle, rect, polygon): har qism o'z rangida (yumshoq, och ranglar), qora kontur (stroke="#2b2540" stroke-width="3"), qismlar bir-biriga taqalib tursin va butun rasm viewBox ichiga sig'sin. Muhim joylarda ichki chiziqlar va tafsilot qo'shing, bitta tomchi yoki oddiy blob chizmang.
+   - parts maydoniga har qism uchun {x, y, name, text} bering: x va y qismning aynan ichidagi nuqta (viewBox koordinatasida, kontur chizig'ida emas), name 1-3 so'z, text bitta qisqa jumla (70 belgigacha). 3-7 ta qism yetarli. Sahifa shu nuqtaga raqam qo'yadi va izohni pastda chiqaradi.
+   - Aniq bilmagan tafsilotni chizmang va parts ga yozmang. Matnda & o'rniga &amp; yozing.
 Asbob chaqirgandan keyin chatga qisqa izoh yozing: nima ko'rsatildi va eng muhim xulosa nima (2-4 jumla).
 
 VIZUAL JAVOB (muhim)
@@ -677,7 +677,12 @@ TOOLS[0].functionDeclarations.push({
   description: "Tushuntiruvchi rasm chizadi (SVG kodi): anatomiya, qurilma tuzilishi, xarita, o'quv plakat, raqamlangan izohli rasm. Shakl va joylashuv muhim bo'lgan, oddiy grafik yoki sxemaga sig'maydigan mavzularda chaqiring. Foydalanuvchi so'ramasa ham, mazmun mos bo'lsa chaqiring.",
   parameters: { type: "OBJECT", properties: {
     title: { type: "STRING", description: "Rasm sarlavhasi" },
-    svg: { type: "STRING", description: "To'liq SVG kodi: <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\">...</svg>. Script, tashqi havola, rasm fayli va <style> ishlatmang. Faqat rect, circle, ellipse, path, line, polygon, polyline, text, g, defs, linearGradient, clipPath. ``` belgilarisiz." }
+    svg: { type: "STRING", description: "Faqat rasmning o'zi: <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 400\">...</svg>. Sarlavha, raqam va izoh qutisini yozmang. Script, tashqi havola, rasm fayli va <style> ishlatmang. Faqat rect, circle, ellipse, path, line, polygon, polyline, text, g, defs, linearGradient, clipPath. ``` belgilarisiz." },
+    parts: { type: "ARRAY", description: "Rasm qismlari ro'yxati (ixtiyoriy, 2-8 ta). Sahifa har biriga raqamli belgi qo'yadi va pastda izoh qutisi chiqaradi.", items: { type: "OBJECT", properties: {
+      x: { type: "NUMBER", description: "Qismning rasm ichidagi X koordinatasi (viewBox bo'yicha), qismning ichida bo'lsin" },
+      y: { type: "NUMBER", description: "Qismning rasm ichidagi Y koordinatasi" },
+      name: { type: "STRING", description: "Qism nomi, 1-3 so'z" },
+      text: { type: "STRING", description: "Bitta qisqa jumla, 70 belgigacha: vazifasi" } }, required: ["x", "y", "name", "text"] } }
   }, required: ["title", "svg"] }
 });
 /* Gemini yozgan SVG ni xavfsiz qiladi: skript, tashqi havola va hodisalar olib tashlanadi, id lar prefiks oladi, orqa fon qo'shiladi */
@@ -716,6 +721,34 @@ function cleanSvg(code, uid) {
     return new XMLSerializer().serializeToString(root);
   } catch (e) { return null; }
 }
+const PART_COL = ["#e9739b", "#f2a73d", "#5aa0e8", "#46b58a", "#8f7be0", "#f08a5d", "#2fb7c4", "#c75cd6"];
+/* rasm + qismlar ro'yxati -> raqamli belgilar va izoh qutilari sahifa tomonidan joylanadi */
+function svgOf(v, uid) {
+  const pic = cleanSvg(v.code, uid); if (!pic) return null;
+  const ps = Array.isArray(v.parts) ? v.parts.filter(p => p && Number.isFinite(+p.x) && Number.isFinite(+p.y)).slice(0, 8) : [];
+  if (!ps.length) return pic;
+  const vbm = /viewBox="([^"]+)"/.exec(pic.slice(0, 600)); const vb = vbm ? vbm[1].split(/\s+/).map(Number) : [0, 0, 800, 400];
+  const sc = Math.min(760 / vb[2], 400 / vb[3]), pw = vb[2] * sc, ph = vb[3] * sc, px = (800 - pw) / 2, py = 62;
+  const X = t => String(t == null ? "" : t).replace(/[&<>"\u0000-\u001f]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] || " "));
+  const cols = ps.length <= 4 ? 2 : 3, gap = 14, bw = (760 - gap * (cols - 1)) / cols, per = Math.max(14, Math.floor((bw - 28) / 7.2));
+  const wrap = t => { const w = String(t || "").split(/\s+/), L = []; let c = ""; w.forEach(x => { if ((c + " " + x).trim().length > per && c) { L.push(c); c = x; } else c = (c + " " + x).trim(); }); if (c) L.push(c); return L.slice(0, 4); };
+  const boxes = ps.map(p => ({ p, L: wrap(p.text) }));
+  const rows = []; for (let i = 0; i < boxes.length; i += cols) rows.push(boxes.slice(i, i + cols));
+  let y = py + ph + 22, out = "", k = 0;
+  rows.forEach(r => { const h = 36 + Math.max(...r.map(b => b.L.length)) * 18 + 6;
+    r.forEach((b, j) => { const col = PART_COL[(k) % PART_COL.length], x = 20 + j * (bw + gap); k++;
+      out += '<rect x="' + x + '" y="' + y + '" width="' + bw + '" height="' + h + '" rx="12" fill="#fff" stroke="' + col + '" stroke-width="2.5"/>' +
+        '<circle cx="' + (x + 20) + '" cy="' + (y + 22) + '" r="11" fill="' + col + '"/><text x="' + (x + 20) + '" y="' + (y + 27) + '" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">' + k + "</text>" +
+        '<text x="' + (x + 38) + '" y="' + (y + 27) + '" font-size="15" font-weight="800" fill="#2b2540">' + X(String(b.p.name).slice(0, 28)) + "</text>" +
+        b.L.map((l, n) => '<text x="' + (x + 14) + '" y="' + (y + 50 + n * 18) + '" font-size="13.5" fill="#4a4560">' + X(l) + "</text>").join(""); });
+    y += h + gap; });
+  const marks = ps.map((p, i) => { const mx = px + (+p.x - vb[0]) * sc, my = py + (+p.y - vb[1]) * sc, col = PART_COL[i % PART_COL.length];
+    return '<circle cx="' + mx.toFixed(1) + '" cy="' + my.toFixed(1) + '" r="13" fill="#fff" stroke="' + col + '" stroke-width="3"/><text x="' + mx.toFixed(1) + '" y="' + (my + 5).toFixed(1) + '" text-anchor="middle" font-size="14" font-weight="800" fill="#2b2540">' + (i + 1) + "</text>"; }).join("");
+  const H = Math.ceil(y + 6);
+  const inner = pic.replace(/^<svg /, '<svg x="' + px.toFixed(1) + '" y="' + py + '" width="' + pw.toFixed(1) + '" height="' + ph.toFixed(1) + '" ');
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 ' + H + '" font-family="Nunito, system-ui, Arial, sans-serif"><rect width="800" height="' + H + '" fill="#fbf8f3"/>' +
+    '<text x="400" y="38" text-anchor="middle" font-size="22" font-weight="800" fill="#2b2540">' + X(v.title) + "</text>" + inner + marks + out + "</svg>";
+}
 function parseVisuals(parts) {
   const out = [];
   for (const p of parts) {
@@ -723,7 +756,9 @@ function parseVisuals(parts) {
     if (fc.name === "show_diagram" && typeof a.code === "string" && a.code.trim())
       out.push({ kind: "diagram", title: String(a.title || "Diagramma").slice(0, 120), code: a.code.replace(/^```(?:mermaid)?\s*|```\s*$/g, "").trim() });
     if (fc.name === "show_svg" && typeof a.svg === "string" && a.svg.trim())
-      out.push({ kind: "svg", title: String(a.title || "Rasm").slice(0, 120), code: a.svg.replace(/^```(?:svg|xml)?\s*|```\s*$/g, "").trim() });
+      { const vis = { kind: "svg", title: String(a.title || "Rasm").slice(0, 120), code: a.svg.replace(/^```(?:svg|xml)?\s*|```\s*$/g, "").trim() };
+        if (Array.isArray(a.parts)) { const ps = a.parts.slice(0, 8).filter(p => p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))).map(p => ({ x: Number(p.x), y: Number(p.y), name: String(p.name || "").slice(0, 40), text: String(p.text || "").slice(0, 120) })); if (ps.length) vis.parts = ps; }
+        out.push(vis); }
     if (fc.name === "show_chart" && Array.isArray(a.labels) && Array.isArray(a.series)) {
       const labels = a.labels.slice(0, 40).map(x => String(x));
       const series = a.series.slice(0, 10).map(s => ({ name: String((s && s.name) || ""), values: labels.map((_, i) => { const n = Number(s && s.values && s.values[i]); return Number.isFinite(n) ? n : 0; }) }));
@@ -913,18 +948,18 @@ function visualHtml(m) {
   return '<div class="visuals">' + m.visuals.map((v, i) => {
     let inner;
     if (v.kind === "chart") inner = '<div class="vbody" data-act="vopen">' + chartSvg(v) + "</div>";
-    else if (v.kind === "svg") { const sv = cleanSvg(v.code, "c" + m.id.slice(0, 6) + i); inner = '<div class="vbody" data-act="vopen">' + (sv || '<div class="verr">Rasmni chizib bo\'lmadi. Manba kodini tekshiring.</div>') + "</div>"; }
+    else if (v.kind === "svg") { const sv = svgOf(v, "c" + m.id.slice(0, 6) + i); inner = '<div class="vbody" data-act="vopen">' + (sv || '<div class="verr">Rasmni chizib bo\'lmadi. Manba kodini tekshiring.</div>') + "</div>"; }
     else { const c = mm.cache.get((isDark() ? "d|" : "l|") + v.code);
       inner = '<div class="vbody mmd" data-act="vopen" data-mid="' + esc(m.id) + '" data-vi="' + i + '"' + (c ? ' data-done="1"' : "") + ">" + (c || '<div class="verr">Diagramma chizilmoqda…</div>') + "</div>"; }
     return '<div class="vis" data-vi="' + i + '"><div class="vhead"><span class="tile sm ' + (v.kind === "diagram" ? "k-audio" : "k-image") + '">' + ic(v.kind === "chart" ? "chart" : v.kind === "svg" ? "image" : "diagram") + '</span><span class="t">' + esc(v.title) + "</span>" +
       '<button class="ab" data-act="vopen" title="Katta ko\'rish" aria-label="Katta ko\'rish">' + ic("expand") + '</button><button class="ab" data-act="vdl" title="SVG sifatida yuklash" aria-label="SVG sifatida yuklash">' + ic("download") + "</button></div>" + inner +
-      "<details><summary>Manba</summary><pre>" + esc(v.kind === "chart" ? JSON.stringify({ type: v.type, labels: v.labels, series: v.series, unit: v.unit }, null, 1) : v.code) + "</pre></details></div>";
+      "<details><summary>Manba</summary><pre>" + esc(v.kind === "chart" ? JSON.stringify({ type: v.type, labels: v.labels, series: v.series, unit: v.unit }, null, 1) : v.code + (v.parts ? "\n\n" + JSON.stringify(v.parts, null, 1) : "")) + "</pre></details></div>";
   }).join("") + "</div>";
 }
 function downloadVisual(m, vi) {
   const v = m.visuals[vi]; let svg;
   if (v.kind === "chart") svg = chartSvg(v);
-  else if (v.kind === "svg") { svg = cleanSvg(v.code, "dl"); if (!svg) { toast("Rasm kodi xato", "err"); return; } }
+  else if (v.kind === "svg") { svg = svgOf(v, "dl"); if (!svg) { toast("Rasm kodi xato", "err"); return; } }
   else { const el = document.querySelector('.vis[data-vi="' + vi + '"] .mmd svg'); if (!el) { toast("Diagramma hali chizilmadi", "err"); return; } svg = new XMLSerializer().serializeToString(el); }
   if (!/xmlns=/.test(svg.slice(0, 200))) svg = svg.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
   const bg = themeColors().surface; svg = svg.replace(/(<svg[^>]*>)/, '$1<rect width="100%" height="100%" fill="' + bg + '"/>');
@@ -956,7 +991,7 @@ function vwFit() {
 }
 function vwSvgFor(v) {
   if (v.kind === "chart") return chartSvg(v);
-  if (v.kind === "svg") return cleanSvg(v.code, "vw") || "";
+  if (v.kind === "svg") return svgOf(v, "vw") || "";
   const c = mm.cache.get((isDark() ? "d|" : "l|") + v.code); return c || "";
 }
 function vwShow() {
@@ -1468,7 +1503,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.17";
+const BUILD = "2026-11-05.18";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
