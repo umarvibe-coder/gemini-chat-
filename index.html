@@ -214,6 +214,8 @@ footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
   padding: 20px max(18px, env(safe-area-inset-left, 0px)) calc(18px + env(safe-area-inset-bottom, 0px)); }
 @media (min-width: 700px) { .sheet { left: 50%; right: auto; width: 560px; transform: translateX(-50%); } }
 .sheet label { display: block; font: 800 11px var(--sans); letter-spacing: .08em; color: var(--muted); margin: 16px 0 5px; }
+.sheet textarea { width: 100%; resize: vertical; padding: 12px 14px; border-radius: 13px; border: 1px solid var(--line); background: var(--bg); font: 400 13px/1.5 var(--codefont); }
+.linkbtn { border: 0; background: none; color: var(--accent); font: 800 13px var(--sans); padding: 0; text-decoration: underline; }
 .sheet input { width: 100%; padding: 12px 14px; border-radius: 13px; border: 1px solid var(--line); background: var(--bg); }
 .sheet .help { font-size: 13px; color: var(--muted); margin: 5px 0 0; }
 .sheet .help a { color: var(--accent); font-weight: 700; }
@@ -289,6 +291,9 @@ footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
   <label for="s-branch">BRANCH</label>
   <input id="s-branch" autocomplete="off" autocapitalize="off" spellcheck="false">
 
+  <label for="s-sys">GEMINI UCHUN KO'RSATMA (tizim prompti)</label>
+  <textarea id="s-sys" rows="9" spellcheck="false"></textarea>
+  <p class="help">Gemini har javobdan oldin shuni o'qiydi. O'zgartirsangiz "Saqlash" ni bosing. <button class="linkbtn" id="s-sysReset" type="button">Asl holiga qaytarish</button></p>
   <p class="help" id="ver"></p>
   <div class="actions"><button class="btn" id="btnSave" data-ic="check">Saqlash</button><button class="btn alt" id="btnClose">Yopish</button></div>
 </section>
@@ -490,7 +495,34 @@ const TOOLS = [{ functionDeclarations: [{
     content: { type: "STRING", description: "Faylning to'liq matni" }
   }, required: ["filename", "format", "content"] }
 }] }];
-const SYS = "Siz foydalanuvchining shaxsiy chatidagi yordamchisiz. MUHIM: foydalanuvchi fayl, hujjat, jadval yoki CSV/Markdown/matn fayli so'rasa, javobni create_file asbobini chaqirib bering. Fayl matnini hech qachon chatga kod bloki yoki oddiy matn qilib yozmang va 'havola orqali yuklab oling' demang: chatga faqat 1-2 jumla yozing, fayl alohida kartochkada chiqadi. Raqamli ma'lumot, taqqoslash yoki statistika uchun show_chart, jarayon, sxema yoki tuzilma uchun show_diagram (Mermaid) asboblarini chaqiring va ma'lumotni uzun matn yoki jadval qilib takrorlamang. Har so'rovga faqat kerakli asbobni chaqiring: grafik yoki sxema so'ralganda kod yozuvchi fayl (masalan .py) yaratmang, fayl faqat foydalanuvchi aynan fayl so'raganda kerak. Oddiy savollarga odatdagidek qisqa va aniq javob bering. Foydalanuvchi qaysi tilda yozsa, shu tilda javob bering.";
+const SYS = `Siz foydalanuvchining shaxsiy chatidagi aqlli yordamchisiz. Foydalanuvchi telefonda ishlaydi, shuning uchun javoblar qisqa, aniq va oson o'qiladigan bo'lsin.
+
+TIL VA USLUB
+- Foydalanuvchi qaysi tilda yozsa, shu tilda javob bering (odatda o'zbekcha, lotin yozuvida).
+- Oddiy savolga kirish va xulosa gaplarsiz, to'g'ridan-to'g'ri javob bering.
+- Taxmin qilsangiz buni ayting. Bilmasangiz "bilmayman" deng, javob to'qimang.
+- Murakkab mavzuni qadamma-qadam va oddiy misollar bilan tushuntiring.
+
+ASBOBLAR (faqat kerak bo'lganda, har so'rovga eng mos bittasini chaqiring)
+1) create_file: foydalanuvchi fayl, hujjat, jadval fayli yoki "yuklab olish" so'raganda.
+   - md: hujjat, reja, konspekt. txt: oddiy matn. csv: jadval (birinchi qator sarlavha, vergul bilan ajrating, vergul bor katakni qo'shtirnoq ichiga oling).
+   - Fayl nomi foydalanuvchi tilida, qisqa, kengaytmasi bilan.
+   - Fayl matnini chatda takrorlamang, chatga 1-2 jumla yozing.
+   - Grafik yoki sxema uchun kod (.py va hokazo) fayli yaratmang.
+2) show_chart: raqamlarni taqqoslash, o'zgarish yoki ulushni ko'rsatish uchun.
+   - Turni to'g'ri tanlang: bar = kategoriyalarni taqqoslash, line = vaqt bo'yicha o'zgarish, pie = butunning bo'laklari (5-6 tadan oshmasin).
+   - labels va values uzunligi teng bo'lsin. Sarlavhada nima ko'rsatilayotganini, unit maydonida birligini yozing.
+   - Foydalanuvchi bergan raqamlarni o'zgartirmang va o'zingizcha raqam to'qimang.
+3) show_diagram (Mermaid): jarayon, tuzilma, ketma-ketlik, reja uchun.
+   - Asosan flowchart TD yoki LR ishlating. Tugun identifikatorlari oddiy lotin harf/raqam (A, B, C1).
+   - Tugun matni doim qo'shtirnoq ichida: A["Matn"]. Matn ichida qo'shtirnoq, qavs va ikki nuqta ishlatmang.
+   - 15 tadan ortiq tugun qilmang. Faqat kod yozing, \`\`\` belgilarisiz.
+Asbob chaqirgandan keyin chatga qisqa izoh yozing: nima ko'rsatildi va eng muhim xulosa nima.
+
+SIFAT
+- So'ralmagan narsa qo'shmang, ortiqcha asbob chaqirmang.
+- Ma'lumot yetishmasa, avval bitta aniqlovchi savol bering.`;
+const sysPrompt = () => LS.get("sys") || SYS;
 const cleanName = (n, fmt) => {
   let x = String(n || "fayl").replace(/[\\\/:*?"<>|\x00-\x1f]/g, "_").trim().slice(0, 80) || "fayl";
   if (!x.toLowerCase().endsWith("." + fmt)) x = x.replace(/\.(md|txt|csv)$/i, "") + "." + fmt;
@@ -668,7 +700,7 @@ async function gemini(chat, upto) {
   const contents = buildContents(chat, upto);
   let useTools = true, r, j;
   for (let attempt = 0; attempt < 4; attempt++) {
-    const body = useTools ? { contents, tools: TOOLS, systemInstruction: { parts: [{ text: SYS }] } } : { contents };
+    const body = useTools ? { contents, tools: TOOLS, systemInstruction: { parts: [{ text: sysPrompt() }] } } : { contents };
     try {
       r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(cfg.model) + ":generateContent", {
         method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": cfg.gkey }, body: JSON.stringify(body)
@@ -989,20 +1021,22 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.5";
+const BUILD = "2026-11-05.6";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
-  $("#s-branch").value = cfg.branch;
+  $("#s-branch").value = cfg.branch; $("#s-sys").value = sysPrompt();
   $("#s-modelBtn").innerHTML = ic("sparkle") + "<span>" + esc(cfg.model || "Tanlanmagan. Bosib tanlang") + "</span>";
   $("#drawer").hidden = true; $("#picker").hidden = true; $("#settings").hidden = false; $("#scrim").hidden = false;
 }
 function closeSettings() { $("#settings").hidden = true; $("#scrim").hidden = true; }
 $("#btnClose").addEventListener("click", closeSettings);
+$("#s-sysReset").addEventListener("click", () => { $("#s-sys").value = SYS; toast("Asl holiga qaytdi. Saqlash ni bosing"); });
 $("#btnSave").addEventListener("click", async () => {
   cfg.gkey = $("#s-gkey").value.trim(); cfg.ghtoken = $("#s-gh").value.trim();
   cfg.repo = $("#s-repo").value.trim(); cfg.branch = $("#s-branch").value.trim() || "main";
   ["gkey", "ghtoken", "repo", "branch"].forEach(k => LS.set(k, cfg[k]));
+  LS.set("sys", $("#s-sys").value.trim() === SYS.trim() ? "" : $("#s-sys").value.trim());
   closeSettings(); render();
   if (canRead()) syncNow();
 });
