@@ -595,7 +595,7 @@ TIL VA USLUB
 - Taxmin qilsangiz buni ayting. Bilmasangiz "bilmayman" deng, javob to'qimang.
 - Murakkab mavzuni qadamma-qadam va oddiy misollar bilan tushuntiring.
 
-ASBOBLAR (faqat kerak bo'lganda, har so'rovga eng mos bittasini chaqiring)
+ASBOBLAR (so'rovga eng mos asbobni tanlang)
 1) create_file: foydalanuvchi fayl, hujjat, jadval fayli yoki "yuklab olish" so'raganda.
    - md: hujjat, reja, konspekt. txt: oddiy matn. csv: jadval (birinchi qator sarlavha, vergul bilan ajrating, vergul bor katakni qo'shtirnoq ichiga oling).
    - pdf: chiroyli hujjat/hisobot. docx: Word hujjati (tahrirlash uchun). Ikkalasining content maydoniga Markdown yozing: # sarlavha, ## bo'lim, - ro'yxat, 1. raqamli ro'yxat, **qalin**, | jadval | qatorlari |. Rasm qo'llab-quvvatlanmaydi.
@@ -613,10 +613,29 @@ ASBOBLAR (faqat kerak bo'lganda, har so'rovga eng mos bittasini chaqiring)
    - Asosan flowchart TD yoki LR ishlating. Tugun identifikatorlari oddiy lotin harf/raqam (A, B, C1).
    - Tugun matni doim qo'shtirnoq ichida: A["Matn"]. Matn ichida qo'shtirnoq, qavs va ikki nuqta ishlatmang.
    - 15 tadan ortiq tugun qilmang. Faqat kod yozing, \`\`\` belgilarisiz.
-Asbob chaqirgandan keyin chatga qisqa izoh yozing: nima ko'rsatildi va eng muhim xulosa nima.
+Asbob chaqirgandan keyin chatga qisqa izoh yozing: nima ko'rsatildi va eng muhim xulosa nima (2-4 jumla).
+
+VIZUAL JAVOB (muhim)
+Foydalanuvchi "grafik" yoki "sxema" demasa ham, savol mazmuniga qarab o'zingiz tanlang. Uzun matndan ko'ra bitta yaxshi vizual aniqroq bo'lsa, vizual chiqaring va qisqa xulosa yozing.
+Signal -> vizual:
+- Raqamlar, narx, statistika, taqqoslash, o'zgarish, ulush, foiz, "qancha" -> show_chart (bar, line yoki pie).
+- "Qanday ishlaydi", jarayon, bosqichlar, algoritm, qaror qabul qilish -> show_diagram, flowchart LR yoki TD.
+- Kim kimga nima yuboradi (mijoz va server, API, ishtirokchilar tartibi) -> sequenceDiagram.
+- Mavzu tuzilmasi, tushunchalar, tasnif, g'oyalar, o'quv xaritasi -> mindmap.
+- Sanali reja, loyiha jadvali -> gantt. Tarixiy voqealar ketma-ketligi -> timeline.
+- Holatlar va o'tishlar -> stateDiagram-v2. Jadvallar o'rtasidagi aloqa -> erDiagram. Ikki mezon bo'yicha joylashtirish (muhim va shoshilinch) -> quadrantChart.
+Vizual KERAK EMAS: salomlashish, oddiy fakt yoki bitta son, fikr va maslahat, kod, tarjima, qisqa javob. Foydalanuvchi "faqat matn" desa ham.
+Kerak bo'lsa 2 tagacha vizual chiqaring (masalan, grafik va sxema). Ortiqcha vizual qo'shmang.
+Raqamlar: foydalanuvchi bergan yoki aniq bilgan sonlarni ishlating. Taxminiy bo'lsa sarlavhada "taxminan" deb yozing. Bilmasangiz o'ylab topmang: avval so'rang yoki matn bilan javob bering.
+Mermaid shablonlari (boshqa turlarni ham shu uslubda yozing, matnlarni oddiy qoldiring):
+- mindmap: birinchi qator mindmap, ikkinchisi "  root((Mavzu))", keyin har daraja 2 ta probel ichkariga.
+- timeline: "timeline", "  title Nom", keyin "  2020 : Voqea" qatorlari.
+- gantt: "gantt", "  dateFormat YYYY-MM-DD", "  section Nom", "  Vazifa :a1, 2026-11-01, 7d", keyingisi "  Vazifa 2 :after a1, 5d".
+- quadrantChart: "  x-axis Past --> Yuqori", "  y-axis Past --> Yuqori", "  quadrant-1 ..." dan quadrant-4 gacha, nuqta "  Nom: [0.3, 0.6]".
+- stateDiagram-v2: "  [*] --> Holat1", "  Holat1 --> Holat2 : sabab".
 
 SIFAT
-- So'ralmagan narsa qo'shmang, ortiqcha asbob chaqirmang.
+- Fayl yoki vizual faqat foydali bo'lsa chiqaring, lekin mazmuni mos bo'lsa so'ramasa ham chiqaring. Bir xil narsani ikki asbob bilan takrorlamang.
 - Ma'lumot yetishmasa, avval bitta aniqlovchi savol bering.`;
 const sysPrompt = () => LS.get("sys") || SYS;
 const FILE_FORMATS = ["md", "txt", "csv", "pdf", "docx", "xlsx"], BIN_FORMATS = ["pdf", "docx", "xlsx"];
@@ -628,7 +647,7 @@ const cleanName = (n, fmt) => {
 /* ---------- vizual javoblar: grafik (o'z SVG) va diagramma (Mermaid) ---------- */
 TOOLS[0].functionDeclarations.push({
   name: "show_chart",
-  description: "Ma'lumotlardan grafik chizadi (ustunli, chiziqli yoki doira). Raqamli taqqoslash, statistika, o'zgarish yoki ulush ko'rsatish kerak bo'lganda chaqiring.",
+  description: "Ma'lumotlardan grafik chizadi (ustunli, chiziqli yoki doira). Raqamli taqqoslash, statistika, o'zgarish yoki ulush ko'rsatish kerak bo'lganda chaqiring. Foydalanuvchi so'ramasa ham, savol mazmuni mos bo'lsa chaqiring.",
   parameters: { type: "OBJECT", properties: {
     title: { type: "STRING", description: "Grafik sarlavhasi" },
     type: { type: "STRING", enum: ["bar", "line", "pie"], description: "bar = ustunli, line = chiziqli (vaqt bo'yicha o'zgarish), pie = doira (ulushlar, faqat 1 ta qator)" },
@@ -640,7 +659,7 @@ TOOLS[0].functionDeclarations.push({
 });
 TOOLS[0].functionDeclarations.push({
   name: "show_diagram",
-  description: "Mermaid kodidan diagramma chizadi: jarayon sxemasi (flowchart), ketma-ketlik (sequenceDiagram), tuzilma, vaqt jadvali (gantt), mind map va hokazo.",
+  description: "Mermaid kodidan diagramma chizadi: jarayon sxemasi (flowchart), ketma-ketlik (sequenceDiagram), tuzilma, vaqt jadvali (gantt, timeline), mind map, holatlar (stateDiagram-v2), quadrantChart va hokazo. Jarayon, tuzilma yoki reja tushuntirilganda, foydalanuvchi so'ramasa ham chaqiring.",
   parameters: { type: "OBJECT", properties: {
     title: { type: "STRING", description: "Diagramma sarlavhasi" },
     code: { type: "STRING", description: "To'g'ri Mermaid sintaksisidagi kod (``` belgilarisiz). Tugun matnlarini qo'shtirnoq ichida yozing." }
@@ -1394,7 +1413,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.15";
+const BUILD = "2026-11-05.16";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
