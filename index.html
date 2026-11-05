@@ -195,6 +195,30 @@ details.prev .old { white-space: pre-wrap; border-left: 3px solid var(--line); p
 .vwbar .grow { flex: 1; }
 .vwbar .ibtn { background: var(--bg); border-radius: 14px; margin: 0 2px; }
 .vwbar .ibtn:disabled { opacity: .35; }
+.dvbody { flex: 1; min-height: 0; overflow: auto; margin: 0 12px; border-radius: 16px; background: var(--bg); padding: 12px; -webkit-overflow-scrolling: touch; font-size: calc(15px * var(--dvs, 1)); }
+.dvbody .paper { background: #fff; color: #1a1a1f; border-radius: 6px; padding: 22px 20px; box-shadow: 0 2px 14px rgba(0,0,0,.18); line-height: 1.55; overflow-wrap: anywhere; }
+.dvbody .paper ul, .dvbody .paper ol { padding-left: 1.4em; }
+.dvbody .paper h1, .dvbody .paper h2, .dvbody .paper h3 { line-height: 1.25; margin: 1em 0 .4em; }
+.dvbody .paper h1 { font-size: 1.5em; border-bottom: 1px solid #ddd; padding-bottom: .25em; margin-top: 0; }
+.dvbody .paper h2 { font-size: 1.25em; } .dvbody .paper h3 { font-size: 1.08em; }
+.dvbody .paper .tw { overflow-x: auto; margin: .7em 0; }
+.dvbody .paper table { display: table; min-width: 100%; width: 100%; border-collapse: collapse; font-size: .9em; }
+.dvbody .paper th, .dvbody .paper td { border: 1px solid #c9c9d0; padding: 5px 8px; text-align: left; }
+.dvbody .paper th { background: #ececf1; }
+.dvbody .paper th, .dvbody .paper td { overflow-wrap: normal; word-break: normal; hyphens: auto; }
+.dvbody .paper pre { background: #f2f2f5; padding: 10px; border-radius: 6px; overflow: auto; font-size: .85em; }
+.dvbody .paper code { background: #f2f2f5; padding: 1px 4px; border-radius: 4px; }
+.dvbody .paper hr { border: 0; border-top: 1px solid #ccc; }
+.dvbody .plainsrc { white-space: pre-wrap; overflow-wrap: anywhere; font: 400 .88em/1.55 var(--codefont, monospace); margin: 0; }
+.dvbody .xsheet { overflow: auto; max-height: 100%; }
+.dvbody .xsheet table { border-collapse: collapse; font-size: .88em; background: var(--surface); }
+.dvbody .xsheet th, .dvbody .xsheet td { border: 1px solid var(--line); padding: 5px 9px; white-space: nowrap; }
+.dvbody .xsheet th { background: var(--code); color: var(--muted); font-weight: 700; position: sticky; top: 0; }
+.dvbody .xsheet th.rn { left: 0; z-index: 1; }
+.dvbody .xsheet tr.hd td { background: var(--code); font-weight: 800; }
+.dvbody .xsheet td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.file .top { cursor: pointer; }
+.file .fhint { font: 600 11.5px var(--sans); color: var(--muted); padding: 2px 4px 4px 52px; }
 .vwcount { min-width: 54px; text-align: center; font: 800 15px var(--sans); }
 .vbody[data-act] { cursor: zoom-in; }
 
@@ -340,6 +364,21 @@ footer.composer .wrap { padding-top: 8px; padding-bottom: 10px; }
   <div class="actions"><button class="btn alt" id="p-close">Yopish</button></div>
 </section>
 
+<div class="viewer" id="docv" hidden>
+  <section class="vwsheet" role="dialog" aria-modal="true" aria-label="Faylni o'qish">
+    <div class="vwhead"><span class="t" id="dvTitle"></span><button class="ibtn" id="dvClose" data-ic="x" aria-label="Yopish" title="Yopish"></button></div>
+    <div class="dvbody" id="dvBody"></div>
+    <div class="vwbar">
+      <button class="ibtn" id="dvSmall" data-ic="minus" aria-label="Matnni kichiklashtirish"></button>
+      <button class="ibtn" id="dvBig" data-ic="plus" aria-label="Matnni kattalashtirish"></button>
+      <button class="ibtn" id="dvSrc" data-ic="file" aria-label="Manba matn" title="Manba matn"></button>
+      <span class="grow"></span>
+      <button class="ibtn" id="dvShare" data-ic="upload" aria-label="Ulashish" title="Ulashish" hidden></button>
+      <button class="ibtn" id="dvDl" data-ic="download" aria-label="Telefonga yuklab olish" title="Telefonga yuklab olish"></button>
+      <button class="ibtn" id="dvSave" data-ic="check" aria-label="Repo'ga saqlash" title="Repo'ga saqlash"></button>
+    </div>
+  </section>
+</div>
 <div class="viewer" id="viewer" hidden>
   <section class="vwsheet" role="dialog" aria-modal="true" aria-label="Katta ko'rish">
     <div class="vwhead"><span class="t" id="vwTitle"></span><button class="ibtn" id="vwClose" data-ic="x" aria-label="Yopish" title="Yopish"></button></div>
@@ -869,8 +908,92 @@ function closeViewer(fromPop) {
   $("#viewer").hidden = true; $("#vwStage").innerHTML = "";
   if (!fromPop && history.state && history.state.vw) history.back();
 }
-window.addEventListener("popstate", () => closeViewer(true));
-document.addEventListener("keydown", e => { if (e.key === "Escape") closeViewer(); });
+/* ---------- fayl o'qish oynasi (PDF, Word, Excel, CSV, MD, TXT) ---------- */
+const dv = { chatId: null, id: null, fi: 0, src: false, scale: 1 };
+const dvFile = () => { const c = state.chats.get(dv.chatId); const ch = c && c.chat; const m = ch && ch.messages.find(x => x.id === dv.id); return m && m.files && m.files[dv.fi]; };
+const cellNum = v => { const t = String(v).trim(); return /^-?\d{1,15}(\.\d+)?$/.test(t) && !/^-?0\d/.test(t) ? +t : null; };
+const colLetter = n => { let s = ""; for (n++; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s; return s; };
+function sheetValues(rows) {
+  const memo = new Map(), busy = new Set();
+  const ref = (cs, rs) => { let c = 0; for (const ch of cs) c = c * 26 + ch.charCodeAt(0) - 64; return [+rs - 1, c - 1]; };
+  const get = (r, c) => {
+    const k = r + ":" + c; if (memo.has(k)) return memo.get(k);
+    const raw = rows[r] && rows[r][c] != null ? String(rows[r][c]) : "";
+    let out = raw;
+    if (r > 0 && /^=.+/.test(raw.trim())) {
+      if (busy.has(k)) return "#TSIKL";
+      busy.add(k);
+      try {
+        let ex = raw.trim().slice(1).toUpperCase();
+        const rng = (a, b) => { const [r1, c1] = ref(a.match(/[A-Z]+/)[0], a.match(/\d+/)[0]), [r2, c2] = ref(b.match(/[A-Z]+/)[0], b.match(/\d+/)[0]), v = []; for (let i = Math.min(r1, r2); i <= Math.max(r1, r2); i++) for (let j = Math.min(c1, c2); j <= Math.max(c1, c2); j++) { const x = get(i, j); if (typeof x === "number") v.push(x); } return v; };
+        ex = ex.replace(/(SUM|AVERAGE|AVG|MIN|MAX|COUNT)\(\s*([A-Z]+\d+)\s*:\s*([A-Z]+\d+)\s*\)/g, (m, fn, a, b) => { const v = rng(a, b); const r = fn === "SUM" ? v.reduce((x, y) => x + y, 0) : fn === "COUNT" ? v.length : !v.length ? 0 : fn === "MIN" ? Math.min(...v) : fn === "MAX" ? Math.max(...v) : v.reduce((x, y) => x + y, 0) / v.length; return "(" + r + ")"; });
+        ex = ex.replace(/([A-Z]+)(\d+)/g, (m, cs, rs) => { const [i, j] = ref(cs, rs), x = get(i, j); return "(" + (typeof x === "number" ? x : 0) + ")"; }).replace(/\^/g, "**");
+        if (!/^[0-9+\-*\/().,%\s]*$/.test(ex.replace(/\*\*/g, "*"))) throw 0;
+        const v = Function('"use strict";return (' + ex.replace(/(\d+(?:\.\d+)?)%/g, "($1/100)") + ")")();
+        out = Number.isFinite(v) ? v : "#XATO";
+      } catch (e) { out = "#XATO"; }
+      busy.delete(k);
+    } else if (r > 0) { const n = cellNum(raw); if (n != null) out = n; }
+    memo.set(k, out); return out;
+  };
+  return get;
+}
+async function docHtml(f) {
+  if (dv.src) return '<pre class="plainsrc">' + esc(f.content) + "</pre>";
+  if (f.format === "pdf" || f.format === "docx") { await loadDocGen(); return '<div class="paper">' + DocGen.toHtml(f.content) + "</div>"; }
+  if (f.format === "md") { await loadDocGen(); return '<div class="paper">' + DocGen.toHtml(f.content) + "</div>"; }
+  if (f.format === "csv" || f.format === "xlsx") {
+    await loadDocGen();
+    const rows = DocGen.parseCsv(f.content), n = Math.max(1, ...rows.map(r => r.length)), get = sheetValues(rows);
+    let h = '<div class="xsheet"><table><thead><tr><th class="rn"></th>';
+    for (let c = 0; c < n; c++) h += "<th>" + colLetter(c) + "</th>";
+    h += "</tr></thead><tbody>";
+    rows.forEach((r, i) => {
+      h += "<tr" + (i === 0 ? ' class="hd"' : "") + '><th class="rn">' + (i + 1) + "</th>";
+      for (let c = 0; c < n; c++) { const v = get(i, c); h += typeof v === "number" ? '<td class="num">' + v.toLocaleString("en-US", { maximumFractionDigits: 2 }) + "</td>" : "<td>" + esc(v) + "</td>"; }
+      h += "</tr>";
+    });
+    return h + "</tbody></table></div>";
+  }
+  return '<pre class="plainsrc">' + esc(f.content) + "</pre>";
+}
+async function dvRender() {
+  const f = dvFile(); if (!f) return;
+  $("#dvTitle").textContent = f.name;
+  try { $("#dvBody").innerHTML = await docHtml(f); } catch (e) { $("#dvBody").innerHTML = '<pre class="plainsrc">' + esc(f.content) + "</pre>"; }
+  $("#dvBody").style.setProperty("--dvs", dv.scale);
+  $("#dvSrc").classList.toggle("acc", dv.src);
+}
+async function openDoc(m, fi, chat) {
+  dv.chatId = chat.id; dv.id = m.id; dv.fi = fi; dv.src = false;
+  $("#docv").hidden = false; $("#dvShare").hidden = !(navigator.canShare && navigator.share);
+  history.pushState({ dv: 1 }, "");
+  await dvRender(); $("#dvBody").scrollTop = 0;
+}
+function closeDoc(fromPop) {
+  if ($("#docv").hidden) return;
+  $("#docv").hidden = true; $("#dvBody").innerHTML = "";
+  if (!fromPop && history.state && history.state.dv) history.back();
+}
+$("#dvClose").addEventListener("click", () => closeDoc());
+$("#docv").addEventListener("click", e => { if (e.target.id === "docv") closeDoc(); });
+$("#dvSmall").addEventListener("click", () => { dv.scale = Math.max(0.7, +(dv.scale - 0.15).toFixed(2)); $("#dvBody").style.setProperty("--dvs", dv.scale); });
+$("#dvBig").addEventListener("click", () => { dv.scale = Math.min(2, +(dv.scale + 0.15).toFixed(2)); $("#dvBody").style.setProperty("--dvs", dv.scale); });
+$("#dvSrc").addEventListener("click", () => { dv.src = !dv.src; dvRender(); });
+$("#dvDl").addEventListener("click", () => { const f = dvFile(); if (f) fileDownload(f); });
+$("#dvSave").addEventListener("click", () => { const f = dvFile(), c = state.chats.get(dv.chatId); if (f && c) fileSave(c.chat, dv.id, dv.fi, f); });
+$("#dvShare").addEventListener("click", async () => {
+  const f = dvFile(); if (!f) return;
+  try {
+    const bin = BIN_FORMATS.includes(f.format);
+    const type = bin ? (await loadDocGen(), DocGen.MIME[f.format]) : "text/plain";
+    const file = new File([bin ? await fileBytes(f) : f.content], f.name, { type });
+    if (navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: f.name });
+    else await fileDownload(f);
+  } catch (e) { if (e && e.name !== "AbortError") toast("Ulashib bo'lmadi: " + (e.message || e), "err"); }
+});
+window.addEventListener("popstate", () => { closeViewer(true); closeDoc(true); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeViewer(); closeDoc(); } });
 $("#vwClose").addEventListener("click", () => closeViewer());
 $("#viewer").addEventListener("click", e => { if (e.target.id === "viewer") closeViewer(); });
 const vwMid = () => { const r = vwBody().getBoundingClientRect(); return [r.width / 2, r.height / 2]; };
@@ -921,6 +1044,27 @@ function loadDocGen() {
   if (window.DocGen) return Promise.resolve();
   if (!docgenP) docgenP = new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = "docgen.js?v=" + BUILD; sc.onload = ok; sc.onerror = () => { docgenP = null; no(new Error("docgen.js yuklanmadi")); }; document.head.appendChild(sc); });
   return docgenP;
+}
+async function fileDownload(f) {
+  await withBusy(async () => {
+    const bin = BIN_FORMATS.includes(f.format);
+    const mime = { md: "text/markdown", txt: "text/plain", csv: "text/csv" }[f.format] || "text/plain";
+    const blob = bin ? new Blob([await fileBytes(f)], { type: DocGen.MIME[f.format] })
+      : new Blob([f.format === "csv" ? "\ufeff" + f.content : f.content], { type: mime + ";charset=utf-8" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = f.name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast("Yuklab olindi: " + f.name);
+  });
+}
+async function fileSave(chat, id, fi, f) {
+  await withBusy(async () => {
+    const path = "files/" + chat.id + "/" + f.name;
+    let sha; try { sha = (await gh("GET", path)).sha; } catch (e) { if (e.status !== 404) throw e; }
+    const b64 = BIN_FORMATS.includes(f.format) ? bytesB64(await fileBytes(f)) : enc(f.content);
+    await gh("PUT", path, { message: "file " + path, content: b64, branch: cfg.branch, ...(sha ? { sha } : {}) });
+    await mutate(chat.id, c => { const x = c.messages.find(y => y.id === id); if (x && x.files && x.files[fi]) x.files[fi].saved = path; });
+    toast("Repo'ga saqlandi: " + path);
+  });
 }
 async function fileBytes(f) { await loadDocGen(); return DocGen.build(f.format, f.name, f.content); }
 const fmtSize = n => n < 1024 ? n + " B" : (n / 1024).toFixed(1) + " KB";
@@ -1103,11 +1247,11 @@ function msgHtml(m) {
   let fh = "";
   if (m.files && m.files.length) {
     fh = '<div class="files">' + m.files.map((f, i) =>
-      '<div class="file" data-fi="' + i + '"><div class="top"><span class="tile sm k-other">' + ic("file") + '</span><div class="tx"><span class="t">' + esc(f.name) + '</span><span class="s">' +
+      '<div class="file" data-fi="' + i + '"><div class="top" data-act="fopen"><span class="tile sm k-other">' + ic("file") + '</span><div class="tx"><span class="t">' + esc(f.name) + '</span><span class="s">' +
       f.format.toUpperCase() + " · " + fmtSize(new Blob([f.content]).size) + (BIN_FORMATS.includes(f.format) ? " (manba)" : "") + (f.saved ? " · repo'da: " + esc(f.saved) : "") + '</span></div>' +
       '<button class="ab" data-act="fdl" title="Telefonga yuklab olish" aria-label="Telefonga yuklab olish">' + ic("download") + '</button>' +
       '<button class="ab" data-act="fsave" title="Repo\'ga saqlash" aria-label="Repo\'ga saqlash">' + ic("upload") + '</button></div>' +
-      '<details><summary>Ko\'rish</summary><pre>' + esc(f.content) + '</pre></details></div>').join("") + "</div>";
+      '<div class="fhint">Ochish uchun bosing</div></div>').join("") + "</div>";
   }
   return '<article class="msg ' + (isU ? "user" : "model") + '" data-id="' + esc(m.id) + '">' +
     '<div class="meta">' + av + '<span class="who">' + who + "</span><span>" + esc(sub) + "</span>" + tags + "</div>" +
@@ -1179,29 +1323,12 @@ $("#msgs").addEventListener("click", async ev => {
   const art = b.closest("[data-id]"); const id = art && art.dataset.id;
   const chat = curChat(); const m = chat && chat.messages.find(x => x.id === id);
   if (!m) return;
-  if (act === "fdl" || act === "fsave") {
+  if (act === "fdl" || act === "fsave" || act === "fopen") {
     const fi = +b.closest(".file").dataset.fi, f = m.files && m.files[fi];
     if (!f) return;
-    if (act === "fdl") {
-      await withBusy(async () => {
-        const bin = BIN_FORMATS.includes(f.format);
-        const mime = { md: "text/markdown", txt: "text/plain", csv: "text/csv" }[f.format] || "text/plain";
-        const blob = bin ? new Blob([await fileBytes(f)], { type: DocGen.MIME[f.format] })
-          : new Blob([f.format === "csv" ? "\ufeff" + f.content : f.content], { type: mime + ";charset=utf-8" });
-        const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = f.name;
-        document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-        toast("Yuklab olindi: " + f.name);
-      });
-    } else {
-      await withBusy(async () => {
-        const path = "files/" + chat.id + "/" + f.name;
-        let sha; try { sha = (await gh("GET", path)).sha; } catch (e) { if (e.status !== 404) throw e; }
-        const b64 = BIN_FORMATS.includes(f.format) ? bytesB64(await fileBytes(f)) : enc(f.content);
-        await gh("PUT", path, { message: "file " + path, content: b64, branch: cfg.branch, ...(sha ? { sha } : {}) });
-        await mutate(chat.id, c => { const x = c.messages.find(y => y.id === id); if (x && x.files && x.files[fi]) x.files[fi].saved = path; });
-        toast("Repo'ga saqlandi: " + path);
-      });
-    }
+    if (act === "fopen") openDoc(m, fi, chat);
+    else if (act === "fdl") await fileDownload(f);
+    else await fileSave(chat, id, fi, f);
     return;
   }
   if (act === "vopen") { const vi = +b.closest(".vis").dataset.vi; if (m.visuals[vi].kind === "diagram" && !mm.cache.get((isDark() ? "d|" : "l|") + m.visuals[vi].code)) { toast("Diagramma hali chizilmagan"); return; } openViewer(m, vi); return; }
@@ -1267,7 +1394,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-05.13";
+const BUILD = "2026-11-05.14";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;

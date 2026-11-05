@@ -402,6 +402,24 @@
     return concat(parts);
   }
 
+  /* ---------- Markdown -> HTML (ilova ichidagi ko'rish uchun, kutubxonasiz) ---------- */
+  function toHtml(src) {
+    const h = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const rn = runs => runs.map(r => { let t = h(r.t); if (r.c) t = "<code>" + t + "</code>"; if (r.b) t = "<strong>" + t + "</strong>"; if (r.i) t = "<em>" + t + "</em>"; return t; }).join("");
+    let out = "", list = null;
+    const close = () => { if (list) { out += "</" + list + ">"; list = null; } };
+    for (const b of parseMd(src)) {
+      if (b.t === "li") { const tag = b.ord ? "ol" : "ul"; if (list !== tag) { close(); out += "<" + tag + ">"; list = tag; } out += '<li style="margin-left:' + b.lvl * 18 + 'px">' + rn(b.runs) + "</li>"; continue; }
+      close();
+      if (b.t === "h") out += "<h" + b.l + ">" + rn(b.runs) + "</h" + b.l + ">";
+      else if (b.t === "p") out += "<p>" + rn(b.runs) + "</p>";
+      else if (b.t === "hr") out += "<hr>";
+      else if (b.t === "code") out += "<pre>" + h(b.lines.join("\n")) + "</pre>";
+      else if (b.t === "tbl") out += '<div class="tw"><table><thead><tr>' + b.rows[0].map(c => "<th>" + rn(c) + "</th>").join("") + "</tr></thead><tbody>" + b.rows.slice(1).map(r => "<tr>" + r.map(c => "<td>" + rn(c) + "</td>").join("") + "</tr>").join("") + "</tbody></table></div>";
+    }
+    close();
+    return out;
+  }
   const MIME = {
     pdf: "application/pdf",
     docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -413,6 +431,6 @@
     if (format === "xlsx") return xlsx(name, content);
     throw new Error("Noma'lum format: " + format);
   }
-  root.DocGen = { build, MIME, parseMd, parseCsv };
+  root.DocGen = { build, MIME, parseMd, parseCsv, toHtml };
   if (typeof module !== "undefined") module.exports = root.DocGen;
 })(typeof window !== "undefined" ? window : globalThis);
