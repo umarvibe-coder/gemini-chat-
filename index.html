@@ -587,6 +587,14 @@ async function gh(method, path, body) {
   }
   return j;
 }
+async function ghRaw(path) {   // 1 MB dan katta fayllarni Contents API oddiy rejimda bermaydi: xom (raw) rejim kerak
+  const url = "https://api.github.com/repos/" + cfg.repo + "/contents/" + path.split("/").map(encodeURIComponent).join("/") + "?ref=" + encodeURIComponent(cfg.branch);
+  let r;
+  try { r = await fetch(url, { cache: "no-store", headers: { Authorization: "Bearer " + cfg.ghtoken, Accept: "application/vnd.github.raw+json", "X-GitHub-Api-Version": "2022-11-28" } }); }
+  catch (e) { throw new Error("GitHub'ga ulanib bo'lmadi (internet?)"); }
+  if (!r.ok) throw new Error("GitHub " + r.status + ": fayl o'qilmadi (" + path + ")");
+  return r.blob();
+}
 async function pool(items, n, fn) {
   let i = 0;
   await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) { await fn(items[i++]); } }));
@@ -595,7 +603,7 @@ async function fetchChat(name) {
   const id = name.replace(/\.json$/, "");
   const j = await gh("GET", "chats/" + name);
   try {
-    const chat = JSON.parse(dec(j.content));
+    const chat = JSON.parse(j.content ? dec(j.content) : await (await ghRaw("chats/" + name)).text());
     if (!Array.isArray(chat.messages)) throw new Error("messages yo'q");
     chat.id = id;
     return { chat, sha: j.sha };
@@ -1670,7 +1678,8 @@ function buildContents(chat, upto) {
       m.attachments.forEach(a => {
         if (!recent) t += "\n\u27e6biriktirilgan fayl (endi ko'rinmaydi): " + a.name + "\u27e7";
         else if (a.text != null) t += "\n\n--- fayl: " + a.name + " ---\n" + a.text;
-        else parts.push({ inlineData: { mimeType: a.mime, data: attB64(a) } });
+        else if (attSrc(a)) parts.push({ inlineData: { mimeType: a.mime, data: attB64(a) } });
+        else t += "\n\u27e6fayl o'qilmadi: " + a.name + "\u27e7";
       });
     }
     parts.unshift({ text: t });
@@ -1678,7 +1687,8 @@ function buildContents(chat, upto) {
   }).filter(c => c.parts[0].text.trim());
 }
 /* ---------- biriktirilgan rasm va fayllar ---------- */
-state.att = [];
+state.att = []; state.attCache = new Map();
+const ATT_INLINE = 250000;
 const AT_MAX = 4, AT_PDF = 3 * 1024 * 1024, AT_TXT = 120000;
 const readData = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(new Error("Faylni o'qib bo'lmadi")); r.readAsDataURL(f); });
 const readText = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(new Error("Faylni o'qib bo'lmadi")); r.readAsText(f); });
@@ -1702,7 +1712,14 @@ function renderStage() {
   const st = $("#stage"); st.hidden = !state.att.length;
   st.innerHTML = state.att.map((a, i) => '<div class="st">' + (a.mime === "image/jpeg" ? '<img src="' + esc(a.src) + '" alt="">' : "<span>" + esc(a.name) + "</span>") + '<button type="button" data-rm="' + i + '" aria-label="Olib tashlash">\u00d7</button></div>').join("");
 }
-const attB64 = a => a.src.slice(a.src.indexOf(",") + 1);
+const attSrc = a => a.src || (a.path && state.attCache.get(a.path)) || "";
+const attB64 = a => { const u = attSrc(a); return u.slice(u.indexOf(",") + 1); };
+async function prepAtt(chat, upto) {   // oxirgi 2 ta biriktirmali xabarning repo'dagi fayllarini oldindan yuklab olamiz
+  const idx = []; for (let k = upto; k >= 0 && idx.length < 2; k--) if (chat.messages[k].attachments && chat.messages[k].attachments.length) idx.push(k);
+  for (const k of idx) for (const a of chat.messages[k].attachments) if (a.path && !a.src && !state.attCache.has(a.path)) {
+    try { state.attCache.set(a.path, await readData(await ghRaw(a.path))); } catch (e) { /* fayl topilmasa belgi bilan o'tamiz */ }
+  }
+}
 async function captionImage(src, prompt) {
   try {
     const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + encodeURIComponent(cfg.model) + ":generateContent", {
@@ -1739,6 +1756,7 @@ function cmdBar() {
   bar.innerHTML = list.map(c => '<button type="button" data-cmd="' + c.n + '"><b>/' + c.n + "</b>" + esc(c.h) + "</button>").join(""); bar.hidden = !list.length;
 }
 async function gemini(chat, upto) {
+  await prepAtt(chat, upto);
   const contents = buildContents(chat, upto);
   const fc = parseCmd(chat.messages[upto] && chat.messages[upto].role === "user" ? chat.messages[upto].text : "");
   let useTools = true, r, j;
@@ -1899,9 +1917,17 @@ async function send() {
     let id = state.cur;
     if (!id) id = await createChat();
     const mid = uid();
+    const atts = [];
+    for (const a of state.att) {   // katta fayl (PDF) chat JSON ichida emas, repo'da alohida fayl bo'lib turadi: aks holda chat 1 MB dan oshib o'qilmay qoladi
+      if (a.src && a.src.length > ATT_INLINE) {
+        const path = "files/" + id + "/" + mid + "-" + (a.name.replace(/[^\w.\-]+/g, "_").slice(0, 60) || "fayl");
+        await gh("PUT", path, { message: "biriktirma " + a.name, content: attB64(a), branch: cfg.branch });
+        state.attCache.set(path, a.src); atts.push({ name: a.name, mime: a.mime, path, size: Math.round(attB64(a).length * 3 / 4) });
+      } else atts.push({ ...a });
+    }
     await mutate(id, c => {
       const msg = { id: mid, role: "user", by: "me", text, ts: Date.now(), pending: true };
-      if (state.att.length) msg.attachments = state.att.map(a => ({ ...a }));
+      if (atts.length) msg.attachments = atts;
       c.messages.push(msg);
       if (!c.title || c.title === "Yangi chat") c.title = (text || (state.att[0] && state.att[0].name) || "Fayl").replace(/\s+/g, " ").slice(0, 40);
     });
@@ -1993,7 +2019,7 @@ function msgHtml(m) {
       '<div class="fhint">Ochish uchun bosing</div></div>').join("") + "</div>";
   }
   let ah = "";
-  if (m.attachments && m.attachments.length) ah = '<div class="atts">' + m.attachments.map(a => a.mime === "image/jpeg" && a.src ? '<img src="' + esc(a.src) + '" alt="' + esc(a.name) + '">' : '<div class="af">' + esc(a.name) + "</div>").join("") + "</div>";
+  if (m.attachments && m.attachments.length) ah = '<div class="atts">' + m.attachments.map(a => a.mime === "image/jpeg" && a.src ? '<img src="' + esc(a.src) + '" alt="' + esc(a.name) + '">' : '<div class="af">' + esc(a.name) + (a.size ? " \u00b7 " + fmtSize(a.size) : "") + "</div>").join("") + "</div>";
   return '<article class="msg ' + (isU ? "user" : "model") + '" data-id="' + esc(m.id) + '">' +
     '<div class="meta">' + av + '<span class="who">' + who + "</span><span>" + esc(sub) + "</span>" + tags + "</div>" +
     body + ah + fh + visualHtml(m) + prev + '<div class="acts">' + acts + "</div></article>";
@@ -2195,7 +2221,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-06.33";
+const BUILD = "2026-11-06.34";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-oakey").value = cfg.oakey; $("#s-oamodel").value = cfg.oamodel; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
