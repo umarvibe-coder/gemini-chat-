@@ -543,6 +543,7 @@ async function regenerate(id) {
 }
 async function syncNow() {
   if (!canRead()) { openSettings(); return; }
+  failed.clear();
   await withBusy(async () => {
     toast("Yangilanmoqda…");
     await refreshAll(); render();
@@ -677,7 +678,7 @@ $("#msgs").addEventListener("click", async ev => {
   else if (act === "regen") regenerate(id);
   else if (act === "answer") {
     if (!canGen()) { toast("Gemini key va modelni sozlang", "err"); return; }
-    withBusy(() => answerOne(chat.id, id));
+    failed.delete(id); withBusy(() => answerOne(chat.id, id));
   }
 });
 $("#send").addEventListener("click", send);
@@ -685,7 +686,7 @@ $("#input").addEventListener("input", autosize);
 $("#input").addEventListener("keydown", e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
 $("#btnSync").addEventListener("click", syncNow);
 $("#btnSettings").addEventListener("click", openSettings);
-$("#bannerBtn").addEventListener("click", () => withBusy(runPendings));
+$("#bannerBtn").addEventListener("click", () => { failed.clear(); withBusy(runPendings); });
 $("#modelChip").addEventListener("click", () => openPicker());
 
 function openDrawer(on) { $("#drawer").hidden = !on; $("#scrim").hidden = !on && $("#settings").hidden; if (on) renderDrawer(); }
@@ -815,6 +816,32 @@ $("#p-list").addEventListener("click", ev => {
   const id = b.closest("li").dataset.id;
   if (b.dataset.p === "test") runTest(id); else pickModel(id);
 });
+
+/* ---------- avto-sync (har 6 soniyada) ---------- */
+const failed = new Set();   // avto-urinishda xato bergan savollar: qayta-qayta urinmaslik uchun
+const sig = () => [...state.chats].map(([k, e]) => k + e.sha).join();
+let ticking = false;
+async function tick() {
+  if (ticking || document.hidden || state.busy || state.editing || !canRead()) return;
+  ticking = true;
+  try {
+    const before = sig();
+    await refreshAll();
+    if (state.busy) return;                       // refresh paytida foydalanuvchi yuborgan bo'lsa tegmaymiz
+    if (sig() !== before) render();
+    const todo = pendings().filter(p => !failed.has(p[1]));
+    if (todo.length && canGen()) {
+      await withBusy(async () => {
+        for (const [cid, mid] of todo) {
+          try { await answerOne(cid, mid); } catch (e) { failed.add(mid); throw e; }
+        }
+      });
+    }
+  } catch (e) { /* tarmoq xatosi: keyingi urinishda qayta */ }
+  finally { ticking = false; }
+}
+setInterval(tick, 6000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
 
 /* ---------- boshlash ---------- */
 render(); autosize();
