@@ -741,6 +741,7 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
 10) draw_icon (tayyor ikonkalar): 189 ta tayyor, bir xil uslubdagi multfilm rasm (olma, kalit, uy, narvon, bolg'a, sovg'a, qayiq, raketa, tulki, daraxt, qo'ng'iroq, ayiqcha, do'ppi, samsa, dutar va boshqalar).
    - Foydalanuvchi oddiy, tanish narsani (bitta yoki bir nechta) so'rasa va u ro'yxatda bo'lsa, shuni tanlang: tez, bepul, har doim aniq. name ro'yxatdan, color hex rang (har ikonkaga mos, yorqin), label ixtiyoriy (1-2 so'z).
    - Ro'yxatda yo'q narsa uchun show_svg yoki draw_image. Ikonkalarni o'zingiz chizishga urinmang.
+11) Vizual (rasm, grafik, ikonka) bilan birga yoziladigan matn: 1-2 qisqa, aniq jumla, rasmda nima borligi yoki qanday ishlatish. Falsafiy xulosa, metafora, ma'no izlash ("ildiz", "cho'qqi", "orzu") va maqtov yozmang.
 Tarixda \u27e6...\u27e7 ichidagi yozuvlar faqat sahifaning eslatmasi (oldin qanday vizual ko'rsatilgani). Ularni HECH QACHON o'zingiz yozmang: grafik, rasm yoki diagramma kerak bo'lsa, tegishli asbobni chaqiring, matnga belgi yozish vizual chiqarmaydi.
 Asbob chaqirgandan keyin chatga qisqa izoh yozing: nima ko'rsatildi va eng muhim xulosa nima (2-4 jumla). Izohsiz qoldirmang.
 
@@ -829,6 +830,12 @@ TOOLS[0].functionDeclarations.push({
   }, required: ["title", "prompt"] }
 });
 const ICO_NAMES = ["apple", "pear", "pomegranate", "fish", "cat", "teapot", "piala", "non", "key", "umbrella", "car", "mushroom", "banana", "grapes", "cherry", "strawberry", "carrot", "watermelon", "onion", "lemon", "corn", "peach", "melon", "tomato", "dog", "rabbit", "hen", "duck", "horse", "cow", "sheep", "bird", "turtle", "snail", "butterfly", "bee", "spoon", "fork", "mug", "bottle", "glasses", "scissors", "pencil", "book", "clock", "lamp", "bell", "broom", "ball", "kite", "balloon", "boat", "airplane", "bicycle", "house", "tree", "flower", "sun", "star", "leaf", "doppi", "cotton", "pomegranate_half", "samsa", "kettle", "dutar", "carpet", "lagan", "hat", "sneaker", "sock", "chair", "table", "bed", "frying_pan", "pot", "bucket", "toothbrush", "comb", "iron", "tv", "telephone", "watering_can", "backpack", "ruler", "eraser", "crayon", "paintbrush", "globe", "notebook", "hammer", "saw", "screwdriver", "wrench", "ladder", "tshirt", "dress", "trousers", "jacket", "scarf", "mitten", "cap", "boot", "sandal", "skirt", "bow_tie", "glove", "bus", "truck", "train", "tractor", "helicopter", "rocket", "ship", "scooter", "fire_truck", "ambulance", "tram", "hot_air_balloon", "whale", "dolphin", "octopus", "crab", "starfish", "seashell", "seahorse", "ladybug", "ant", "dragonfly", "caterpillar", "spider", "lion", "elephant", "giraffe", "bear", "monkey", "fox", "camel", "owl", "frog", "hedgehog", "squirrel", "penguin", "tandoor", "doira", "karnay", "beshik", "ewer", "chopon", "jug", "apricot", "walnut", "almond", "bread", "cake", "ice_cream", "candy", "lollipop", "egg", "cheese", "cookie", "pizza", "cupcake", "honey", "sandwich", "cloud", "rain_cloud", "snowflake", "rainbow", "lightning", "mountains", "cactus", "tulip", "acorn", "fir_tree", "palm", "teddy_bear", "doll", "drum", "guitar", "trumpet", "robot", "blocks", "spinning_top", "xylophone", "puzzle", "gift", "whistle", "moon"];
+function icoKey(n) {
+  n = String(n || "").trim().toLowerCase().replace(/[\s-]+/g, "_"); if (!n) return "";
+  if (ICO_NAMES.includes(n)) return n;
+  const D = ICO.data; if (D) for (const k in D) if (String(D[k].uz).toLowerCase() === n || String(D[k].en).toLowerCase().replace(/[\s-]+/g, "_") === n) return k;
+  return "";
+}
 const ICO_COL = ["#e8b84a", "#d9534f", "#3b82c4", "#3aa860", "#e0457b", "#7c5cd6", "#e8833a", "#a0674b"];
 TOOLS[0].functionDeclarations.push({
   name: "draw_icon",
@@ -836,7 +843,7 @@ TOOLS[0].functionDeclarations.push({
   parameters: { type: "OBJECT", properties: {
     title: { type: "STRING", description: "Foydalanuvchi ko'radigan sarlavha, o'zbekcha, qisqa" },
     items: { type: "ARRAY", description: "1-8 ta ikonka", items: { type: "OBJECT", properties: {
-      name: { type: "STRING", enum: ICO_NAMES, description: "Ikonka nomi" },
+      name: { type: "STRING", description: "Ikonka nomi, aynan shulardan biri: " + ICO_NAMES.join(", ") },
       color: { type: "STRING", description: "Asosiy rang, hex (masalan #e8b84a). Narsaga mos, yorqin rang tanlang" },
       label: { type: "STRING", description: "Ixtiyoriy yozuv, 1-2 so'z" } }, required: ["name"] } },
     bg: { type: "STRING", description: "Ixtiyoriy fon rangi hex. Bo'sh qoldirsangiz och fon" }
@@ -1220,7 +1227,7 @@ function parseVisuals(parts) {
         if (Array.isArray(a.parts)) { const ps = a.parts.slice(0, 8).filter(p => p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))).map(p => ({ x: Number(p.x), y: Number(p.y), name: String(p.name || "").slice(0, 40), text: String(p.text || "").slice(0, 120) })); if (ps.length) vis.parts = ps; }
         out.push(vis); }
     if (fc.name === "draw_icon" && Array.isArray(a.items)) {
-      const items = a.items.slice(0, 8).filter(x => x && ICO_NAMES.includes(x.name)).map(x => ({ name: x.name, color: /^#[0-9a-f]{6}$/i.test(String(x.color || "")) ? String(x.color) : "", label: String(x.label || "").slice(0, 24) }));
+      const items = a.items.slice(0, 8).map(x => x && Object.assign({}, x, { name: icoKey(x.name) })).filter(x => x && x.name).map(x => ({ name: x.name, color: /^#[0-9a-f]{6}$/i.test(String(x.color || "")) ? String(x.color) : "", label: String(x.label || "").slice(0, 24) }));
       if (items.length) out.push({ kind: "icons", title: String(a.title || "Ikonkalar").slice(0, 120), items, bg: /^#[0-9a-f]{6}$/i.test(String(a.bg || "")) ? String(a.bg) : "" });
     }
     if (fc.name === "plot_function" && a.expr) {
@@ -1873,7 +1880,7 @@ async function gemini(chat, upto) {
   await prepAtt(chat, upto);
   const contents = buildContents(chat, upto);
   const fc = parseCmd(chat.messages[upto] && chat.messages[upto].role === "user" ? chat.messages[upto].text : "");
-  let useTools = true, r, j;
+  let useTools = true, r, j, toolErr = "";
   for (let attempt = 0; attempt < 4; attempt++) {
     const body = useTools ? { contents, tools: TOOLS, systemInstruction: { parts: [{ text: sysPrompt() + svgExtra(fc, chat.messages[upto] && chat.messages[upto].text) }] } } : { contents };
     if (useTools && fc) body.toolConfig = { functionCallingConfig: { mode: "ANY", allowedFunctionNames: [fc.tool] } };
@@ -1883,7 +1890,7 @@ async function gemini(chat, upto) {
       });
     } catch (e) { throw new Error("Gemini'ga ulanib bo'lmadi (internet?)"); }
     j = await r.json().catch(() => ({}));
-    if (r.status === 400 && useTools) { useTools = false; toast("Bu model tool'larni qo'llamaydi. Oddiy rejimda urinilmoqda…"); continue; }
+    if (r.status === 400 && useTools) { useTools = false; toolErr = String((j.error && j.error.message) || "400").slice(0, 300); toast("Asboblar xato berdi: " + toolErr.slice(0, 100), "err"); continue; }
     if (r.status !== 503 || attempt >= 3) break;
     toast("Gemini band (503). Qayta urinilmoqda…");
     await new Promise(res => setTimeout(res, attempt ? 5000 : 2000));
@@ -1918,6 +1925,7 @@ async function gemini(chat, upto) {
   }
   const files = parts.filter(p => p.functionCall && p.functionCall.name === "create_file" && p.functionCall.args && typeof p.functionCall.args.content === "string")
     .map(p => { const a = p.functionCall.args; const fm = FILE_FORMATS.includes(a.format) ? a.format : "txt"; return { name: cleanName(a.filename, fm), format: fm, content: a.content }; });
+  if (parts.some(p => p.functionCall && p.functionCall.name === "draw_icon")) await loadIcons().catch(() => {});
   const visuals = parseVisuals(parts);
   for (const p of parts) {
     if (!p.functionCall || p.functionCall.name !== "find_image" || !p.functionCall.args || !p.functionCall.args.query) continue;
@@ -1979,6 +1987,7 @@ async function gemini(chat, upto) {
     const why = (c && c.finishReason) || (j.promptFeedback && j.promptFeedback.blockReason) || "";
     throw new Error("Gemini bo'sh javob qaytardi" + (why ? " (" + why + ")" : ""));
   }
+  if (toolErr) text += (text ? "\n\n" : "") + "(Asboblar ishlamadi, oddiy rejimda javob berildi. Sabab: " + toolErr + ")";
   return { text, files, visuals };
 }
 async function loadModels() {
@@ -2342,7 +2351,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-06.36";
+const BUILD = "2026-11-06.37";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-oakey").value = cfg.oakey; $("#s-oamodel").value = cfg.oamodel; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
