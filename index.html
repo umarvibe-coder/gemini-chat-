@@ -741,6 +741,7 @@ ASBOBLAR (so'rovga eng mos asbobni tanlang)
 10) draw_icon (tayyor ikonkalar): 189 ta tayyor, bir xil uslubdagi multfilm rasm (olma, kalit, uy, narvon, bolg'a, sovg'a, qayiq, raketa, tulki, daraxt, qo'ng'iroq, ayiqcha, do'ppi, samsa, dutar va boshqalar).
    - Foydalanuvchi oddiy, tanish narsani (bitta yoki bir nechta) so'rasa va u ro'yxatda bo'lsa, shuni tanlang: tez, bepul, har doim aniq. name ro'yxatdan, color hex rang (har ikonkaga mos, yorqin), label ixtiyoriy (1-2 so'z).
    - Ro'yxatda yo'q narsa uchun show_svg yoki draw_image. Ikonkalarni o'zingiz chizishga urinmang.
+12) ILOVA HAQIDA (faqat foydalanuvchi shu ilovaning o'zi, ma'lumot saqlanishi yoki maxfiylik haqida so'rasa, shu faktlardan foydalaning, o'zingizdan taxmin qilmang): Bu shaxsiy chat sahifa (GitHub Pages). Chatlar Google serverlarida EMAS, foydalanuvchining shaxsiy PRIVATE GitHub repo'sida (Sozlamalardagi "Repo") chats/<id>.json fayllar sifatida saqlanadi; sahifa ularni GitHub API orqali token bilan o'qiydi va yozadi. Gemini API kaliti, OpenAI kaliti va GitHub token faqat shu qurilma brauzerining localStorage'ida turadi. Har so'rovda chat tarixi va biriktirilgan fayllar Google Gemini API'ga yuboriladi; Google bu ma'lumotni qanday ishlatishi uning shartlariga bog'liq (aniq shartni Google hujjatidan tekshirishni ayting, kategorik gapirmang). Rasm yaratishda so'rov matni Pollinations yoki OpenAI'ga, rasm qidirishda Wikimedia'ga ketadi. Foydalanuvchining boshqa yordamchisi (Claude) shu repo orqali chatlarni o'qiy oladi.
 11) Vizual (rasm, grafik, ikonka) bilan birga yoziladigan matn: 1-2 qisqa, aniq jumla, rasmda nima borligi yoki qanday ishlatish. Falsafiy xulosa, metafora, ma'no izlash va maqtov yozmang.
 Tarixda \u27e6...\u27e7 ichidagi yozuvlar faqat sahifaning eslatmasi (oldin qanday vizual ko'rsatilgani). Ularni HECH QACHON o'zingiz yozmang: grafik, rasm yoki diagramma kerak bo'lsa, tegishli asbobni chaqiring, matnga belgi yozish vizual chiqarmaydi.
 Asbob chaqirgandan keyin chatga 1-2 qisqa jumla yozing: nima ko'rsatildi va uni qanday o'qish kerak. Faqat rasm yoki berilgan sonlarda ko'rinadigan faktlarni ayting; o'sish yoki pasayishni sonlarni solishtirib ayting. Maqtov, baho, taxmin, falsafiy yoki umumiy xulosa yozmang. Izohsiz qoldirmang.
@@ -1803,9 +1804,12 @@ function renderStage() {
   st.innerHTML = state.att.map((a, i) => '<div class="st">' + (a.mime === "image/jpeg" ? '<img src="' + esc(a.src) + '" alt="">' : "<span>" + esc(a.name) + "</span>") + '<button type="button" data-rm="' + i + '" aria-label="Olib tashlash">\u00d7</button></div>').join("");
 }
 function cleanLeak(t) {   // model ba'zan o'z "fikrlash qoralamasi"ni matnga chiqarib yuboradi: faqat oxirgi tayyor javobni olamiz
-  if (!/(Draft \d|User's input|\(Mental\)|No tool calls\?|Constraint)/i.test(t)) return t;
-  const m = [...t.matchAll(/(?:Yes|No)\.(?=[^\s\d*\-])/g)].pop();
-  const tail = m ? t.slice(m.index + m[0].length).trim() : "";
+  if (!/(Draft \d|User's input|\(Mental\)|No tool calls\?|Constraint|The user wants|Did I use|Is it concise|Does it follow)/i.test(t)) return t;
+  let m = [...t.matchAll(/(?:Yes|No)\.(?=[^\s\d*\-])/g)].pop(), tail = m ? t.slice(m.index + m[0].length).trim() : "";
+  if (tail.length <= 20) {   // qoralama oxiri va javob orasida bo'shliq yo'q: "...it goes\".Sizning chatlar..."
+    m = [...t.matchAll(/[.!?"'`)](?=[A-ZЎҚҒҲ][a-zʻ'’‘o]{2,}[ ,])/g)].pop();
+    tail = m ? t.slice(m.index + 1).trim() : "";
+  }
   return tail.length > 20 ? tail : "";
 }
 const attSrc = a => a.src || (a.path && state.attCache.get(a.path)) || "";
@@ -1898,7 +1902,7 @@ async function gemini(chat, upto) {
   if (!r.ok) throw new Error("Gemini " + r.status + ": " + ((j.error && j.error.message) || "xato"));
   const c = j.candidates && j.candidates[0];
   let parts = (c && c.content && c.content.parts) || [];
-  let text = parts.map(p => p.text || "").join("");
+  let text = cleanLeak(parts.map(p => p.text || "").join(""));
   let cparts = parts;
   for (let round = 0; round < 2 && useTools && cparts.some(p => p.functionCall && p.functionCall.name === "calc"); round++) {
     const resp = [];
@@ -2351,7 +2355,7 @@ function startRename() {
 }
 
 /* sozlamalar */
-const BUILD = "2026-11-06.38";
+const BUILD = "2026-11-07.39";
 function openSettings() {
   $("#ver").textContent = "Sahifa versiyasi: " + BUILD;
   $("#s-gkey").value = cfg.gkey; $("#s-oakey").value = cfg.oakey; $("#s-oamodel").value = cfg.oamodel; $("#s-gh").value = cfg.ghtoken; $("#s-repo").value = cfg.repo;
